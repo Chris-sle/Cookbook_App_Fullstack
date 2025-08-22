@@ -1,0 +1,90 @@
+DB setup:
+-----------------------------------------------------------------------------------------------------
+                                           Table "public.users"
+     Column      |            Type             | Collation | Nullable |              Default
+-----------------+-----------------------------+-----------+----------+-----------------------------------
+ id              | integer                     |           | not null | nextval('users_id_seq'::regclass)
+ username        | character varying(150)      |           | not null |
+ email           | character varying(150)      |           | not null |
+ password        | character varying(150)      |           | not null |
+ is_admin        | boolean                     |           |          | false
+ created_at      | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+ status          | character varying(20)       |           |          | 'active'::character varying
+ suspended_until | timestamp without time zone |           |          |
+------------------------------------------------------------------------------------------------------
+Indexes:
+    "users_pkey" PRIMARY KEY, btree (id)
+    "users_email_key" UNIQUE CONSTRAINT, btree (email)
+    "users_username_key" UNIQUE CONSTRAINT, btree (username)
+Referenced by:
+    TABLE "favorites" CONSTRAINT "favorites_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+    TABLE "recipes" CONSTRAINT "recipes_author_id_fkey" FOREIGN KEY (author_id) REFERENCES users(id)
+------------------------------------------------------------------------------------------------------------
+                                         Table "public.recipes"
+    Column    |            Type             | Collation | Nullable |               Default
+--------------+-----------------------------+-----------+----------+-------------------------------------
+ id           | integer                     |           | not null | nextval('recipes_id_seq'::regclass)
+ title        | character varying(150)      |           | not null |
+ instructions | text                        |           | not null |
+ image_url    | text                        |           |          |
+ author_id    | integer                     |           |          |
+ created_at   | timestamp without time zone |           |          | CURRENT_TIMESTAMP
+----------------------------------------------------------------------------------------------------------
+Indexes:
+    "recipes_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "recipes_author_id_fkey" FOREIGN KEY (author_id) REFERENCES users(id)
+-------------------------------------------------------------------------------------------------------------
+                   Table "public.recipe_ingredients"
+    Column     |         Type          | Collation | Nullable | Default
+---------------+-----------------------+-----------+----------+---------
+ recipe_id     | integer               |           | not null |
+ ingredient_id | integer               |           | not null |
+ quantity      | character varying(50) |           |          |
+------------------------------------------------------------------------
+Indexes:
+    "recipe_ingredients_pkey" PRIMARY KEY, btree (recipe_id, ingredient_id)
+Foreign-key constraints:
+    "recipe_ingredients_ingredient_id_fkey" FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
+-------------------------------------------------------------------------------------------------------------
+                                    Table "public.ingredients"
+ Column |          Type          | Collation | Nullable |                 Default
+--------+------------------------+-----------+----------+-----------------------------------------
+ id     | integer                |           | not null | nextval('ingredients_id_seq'::regclass)
+ name   | character varying(100) |           | not null |
+---------------------------------------------------------------------------------------------------
+Indexes:
+    "ingredients_pkey" PRIMARY KEY, btree (id)
+    "ingredients_name_key" UNIQUE CONSTRAINT, btree (name)
+Referenced by:
+    TABLE "recipe_ingredients" CONSTRAINT "recipe_ingredients_ingredient_id_fkey" FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)  
+-------------------------------------------------------------------------------------------------------------
+               Table "public.favorites"
+  Column   |  Type   | Collation | Nullable | Default
+-----------+---------+-----------+----------+---------
+ user_id   | integer |           | not null |
+ recipe_id | integer |           | not null |
+ ------------------------------------------------------
+Indexes:
+    "favorites_pkey" PRIMARY KEY, btree (user_id, recipe_id)
+Foreign-key constraints:
+    "favorites_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
+-------------------------------------------------------------------------------------------------------------
+
+API setup:
+1. Authentication & Authorization Middleware. - Done
+2. Basic CRUD Endpoints Users, Recipes. - Done
+- Users (done)
+- Recipes (done)
+3. Favorites Management Endpoints - Done
+4. Admin-only Endpoints (for moderation)
+- admin View Users. 
+- delete user. 
+- admin ban.
+- admin suspend.
+- admin logistics.
+- create new admins. 
+(need too create the first admin in the db.) 
+5. Error Handling & Validation
+6. Rate Limiting & Security Best Practices
+7. API Versioning & Documentation (Optional but Recommended)

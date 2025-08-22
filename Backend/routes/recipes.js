@@ -71,34 +71,4 @@ router.get('/search', async (req, res) => {
   }
 });
 
-// Add to favorites
-router.post('/favorites', authenticateToken, async (req, res) => {
-  const { recipeId } = req.body;
-  const userId = req.user.user_id;
-  try {
-    await pool.query(
-      'INSERT INTO favorites (user_id, recipe_id) VALUES ($1, $2)',
-      [userId, recipeId]
-    );
-    res.json({ message: 'Recipe added to favorites' });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error or already favorited' });
-  }
-});
-
-// Remove from favorites
-router.delete('/favorites/:recipeId', authenticateToken, async (req, res) => {
-  const { recipeId } = req.params;
-  const userId = req.user.user_id;
-  try {
-    await pool.query(
-      'DELETE FROM favorites WHERE user_id=$1 AND recipe_id=$2',
-      [userId, recipeId]
-    );
-    res.json({ message: 'Removed from favorites' });
-  } catch (err) {
-    res.status(500).json({ message: 'Server error' });
-  }
-});
-
 module.exports = router;
