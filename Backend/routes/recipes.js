@@ -2,73 +2,80 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { body, validationResult } = require('express-validator');
+const { body, query } = require('express-validator');
+const validationHandler = require('../middleware/validationHandler');
 
-// POST /recipes (adding a new recipe)
+// POST /api/recipes - create recipe (requires auth)
 router.post(
-  '/', 
-  authenticateToken, 
+  '/',
+  authenticateToken,
   [
     body('title').notEmpty().withMessage('Title is required'),
     body('instructions').notEmpty().withMessage('Instructions are required'),
+    body('image_url').optional().isURL().withMessage('image_url must be a valid URL'),
     body('ingredients').isArray({ min: 1 }).withMessage('Ingredients array required'),
     body('ingredients.*.ingredient_id').notEmpty().isInt().withMessage('Valid ingredient_id required'),
-    body('ingredients.*.quantity').optional().isString()
+    body('ingredients.*.quantity').optional().isString(),
+    validationHandler
   ],
-  async (req, res) => {
-    // Validation
-    const errors = validationResult(req);
-    if (!errors.isEmpty()) {
-      return res.status(400).json({ errors: errors.array() });
-    }
-
+  async (req, res, next) => {
     const { title, instructions, image_url, ingredients } = req.body;
     const author_id = req.user.user_id;
 
+    const client = await pool.connect();
     try {
-      // Insert into recipes
-      const result = await pool.query(
+      await client.query('BEGIN');
+
+      const insertRecipe = await client.query(
         'INSERT INTO recipes (title, instructions, image_url, author_id) VALUES ($1, $2, $3, $4) RETURNING id',
-        [title, instructions, image_url, author_id]
+        [title, instructions, image_url || null, author_id]
       );
+      const recipeId = insertRecipe.rows[0].id;
 
-      const recipeId = result.rows[0].id;
+      const insertIngredientText = 'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity) VALUES ($1, $2, $3)';
 
-      // Insert ingredients references
       for (const ing of ingredients) {
-        await pool.query(
-          'INSERT INTO recipe_ingredients (recipe_id, ingredient_id, quantity) VALUES ($1, $2, $3)',
-          [recipeId, ing.ingredient_id, ing.quantity || null]
-        );
+        await client.query(insertIngredientText, [recipeId, parseInt(ing.ingredient_id, 10), ing.quantity || null]);
       }
 
-      res.json({ message: 'Recipe created', recipe_id: recipeId });
+      await client.query('COMMIT');
+      res.status(201).json({ message: 'Recipe created', recipe_id: recipeId });
     } catch (err) {
-      res.status(500).json({ message: 'Server error' });
+      await client.query('ROLLBACK').catch(() => {});
+      next(err); // let global error handler respond
+    } finally {
+      client.release();
     }
   }
 );
 
-// GET /recipes/search?ingredient=chicken&protein=chicken
-router.get('/search', async (req, res) => {
-  const { ingredient_id } = req.query;
-  let query = `
-    SELECT r.* FROM recipes r
-    JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-  `;
-  const params = [];
+// GET /api/recipes/search?ingredient_id=1
+router.get(
+  '/search',
+  [
+    query('ingredient_id').optional().isInt().withMessage('ingredient_id must be an integer'),
+    validationHandler
+  ],
+  async (req, res, next) => {
+    const { ingredient_id } = req.query;
+    let queryText = `
+      SELECT DISTINCT r.* FROM recipes r
+      JOIN recipe_ingredients ri ON r.id = ri.recipe_id
+    `;
+    const params = [];
 
-  if (ingredient_id) {
-    params.push(ingredient_id);
-    query += ` WHERE ri.ingredient_id = $${params.length}`;
-  }
+    if (ingredient_id) {
+      params.push(parseInt(ingredient_id, 10));
+      queryText += ` WHERE ri.ingredient_id = $1`;
+    }
 
-  try {
-    const results = await pool.query(query, params.length ? params : undefined);
-    res.json(results.rows);
-  } catch (err) {
-    res.status(500).json({ message: 'Server error' });
+    try {
+      const results = await pool.query(queryText, params.length ? params : undefined);
+      res.json(results.rows);
+    } catch (err) {
+      next(err);
+    }
   }
-});
+);
 
 module.exports = router;
