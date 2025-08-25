@@ -1,4 +1,5 @@
 const express = require('express');
+const helmet = require('helmet');
 const pool = require('./db');
 const authenticateToken = require('./middleware/auth');
 const errorHandler = require('./middleware/errorHandler');
@@ -12,6 +13,50 @@ const app = express();
 const PORT = process.env.PORT || 5000;
 
 // Middleware
+app.use(
+  helmet({
+    // Content Security Policy: restricts sources for scripts, styles, images, etc.
+    contentSecurityPolicy: {
+      directives: {
+        defaultSrc: ["'self'"],                    // Only allow content from the same origin
+        scriptSrc: ["'self'", "'unsafe-inline'"], // Scripts from same origin or inline (adjust as needed)
+        styleSrc: ["'self'", "'unsafe-inline'"],  // Styles from same origin or inline
+        imgSrc: ["'self'", 'data:'],               // Images from same origin or embedded data URIs
+        connectSrc: ["'self'"],                    // Allowed to connect (e.g., fetch API)
+        fontSrc: ["'self'"],                       // Fonts from same origin
+        objectSrc: ["'none'"],                     // Disallow plugins/objects for security
+        upgradeInsecureRequests: [],               // Force HTTPS for all requests
+      },
+    },
+
+    // Referrer Policy: restricts what referrer information is sent
+    referrerPolicy: { policy: 'no-referrer' },
+
+    // Cross-Origin Resource Policy: restricts resources from being loaded cross-site
+    crossOriginResourcePolicy: { policy: 'same-site' },
+
+    // Cross-Origin Opener Policy: isolate browsing context (optional)
+    crossOriginOpenerPolicy: { policy: 'same-origin' },
+
+    // Cross-Origin Embedder Policy: prevent attachment of cross-origin resources
+    crossOriginEmbedderPolicy: { policy: 'require-corp' },
+
+    // Hide X-Powered-By header, to obscure server technology
+    hidePoweredBy: true,
+
+    // Frameguard: prevent clickjacking
+    frameguard: { action: 'deny' },
+
+    // HSTS: enforce HTTPS (very important for production)
+    hsts: { maxAge: 63072000, includeSubDomains: true, preload: true },
+
+    // Expect-CT header for Certificate Transparency
+    expectCt: { maxAge: 86400, enforce: true },
+
+    // Disable or adjust other headers as needed...
+  })
+);
+
 app.use(express.json());
 app.use(json()); // For parsing JSON requests
 
@@ -20,6 +65,8 @@ app.use('/api/admin', authenticateToken, adminRoutes);
 app.use('/api/favorites', authenticateToken, favoritesRoutes);
 app.use('/api/recipes', authenticateToken, recipeRoutes);
 app.use('/api/users', userRoutes);
+
+// Error handling 
 app.use(errorHandler);
 
 // Start server
