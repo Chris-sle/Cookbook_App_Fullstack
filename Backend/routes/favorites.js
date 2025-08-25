@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const authenticateToken = require('../middleware/auth');
-const { param } = require('express-validator');
+const { param, query } = require('express-validator');
 const validationHandler = require('../middleware/validationHandler');
 
 // Add a recipe to favorites
