@@ -1,3 +1,4 @@
+const cors = require('cors');
 const express = require('express');
 const helmet = require('helmet');
 const pool = require('./db');
@@ -11,6 +12,11 @@ const { json } = require('express');
 
 const app = express();
 const PORT = process.env.PORT || 5000;
+
+app.use(cors({
+  origin: 'http://localhost:5173', // your frontend URL
+  credentials: true,               // if you're sending cookies or auth headers
+}));
 
 // Middleware
 app.use(
