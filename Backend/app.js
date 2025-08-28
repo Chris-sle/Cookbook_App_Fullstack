@@ -69,7 +69,7 @@ app.use(json()); // For parsing JSON requests
 // Mount routes
 app.use('/api/admin', authenticateToken, adminRoutes);
 app.use('/api/favorites', authenticateToken, favoritesRoutes);
-app.use('/api/recipes', authenticateToken, recipeRoutes);
+app.use('/api/recipes', recipeRoutes);
 app.use('/api/users', userRoutes);
 
 // Error handling 
