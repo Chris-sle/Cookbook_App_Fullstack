@@ -18,7 +18,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onClickOutside } from 'vue'
+import { ref, computed } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useRouter } from 'vue-router'
 
@@ -41,9 +41,7 @@ function logout() {
 }
 
 // Detect outside click
-onClickOutside(menuRef, () => {
-  closeMenu()
-})
+
 
 const isAuthenticated = computed(() => auth.isAuthenticated)
 </script>
