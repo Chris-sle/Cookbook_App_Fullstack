@@ -1,9 +1,10 @@
 <template>
-  <div class="user-menu" @click="toggleMenu" ref="menuRef">
-    <!-- Button to toggle dropdown -->
-    <button class="menu-button">
+  <div class="user-menu" ref="menuRef">
+    <!-- Button to toggle dropdown (stop propagation so document click doesn't immediately close it) -->
+    <button class="menu-button" @click.stop="toggleMenu">
       ☰ Profile
     </button>
+
     <!-- Dropdown menu -->
     <div v-if="menuOpen" class="dropdown">
       <div v-if="!isAuthenticated">
@@ -18,9 +19,9 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue'
-import { useAuthStore } from '../stores/auth'
+import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -37,11 +38,24 @@ function closeMenu() {
 function logout() {
   auth.clearToken()
   closeMenu()
-  router.push('/') // or wherever
+  router.push('/') // or another route
 }
 
-// Detect outside click
+function handleDocumentClick(e) {
+  const el = menuRef.value
+  if (!el) return
+  // If click is outside the menu element, close the menu
+  if (!el.contains(e.target)) {
+    closeMenu()
+  }
+}
 
+onMounted(() => {
+  document.addEventListener('click', handleDocumentClick)
+})
+onBeforeUnmount(() => {
+  document.removeEventListener('click', handleDocumentClick)
+})
 
 const isAuthenticated = computed(() => auth.isAuthenticated)
 </script>
@@ -51,35 +65,70 @@ const isAuthenticated = computed(() => auth.isAuthenticated)
   position: relative;
   display: inline-block;
 }
+
 .menu-button {
-  background: transparent;
-  border: none;
+  background: #ffffff;
+  border: 1px solid #ccc;
+  padding: 6px 12px;
+  border-radius: 4px;
   cursor: pointer;
-  font-size: 1.2rem;
+  font-size: 1rem;
+  transition: background-color 0.2s, border-color 0.2s;
 }
+.menu-button:hover {
+  background: #f0f0f0;
+  border-color: #999;
+}
+
 .dropdown {
   position: absolute;
   right: 0;
-  top: 100%;
+  top: calc(100% + 8px);
   background: #fff;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  min-width: 150px;
-  box-shadow: 0 2px 6px rgba(0,0,0,0.2);
-  padding: 0.5rem;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+  min-width: 180px;
+  z-index: 1000;
+  padding: 8px 0;
   display: flex;
   flex-direction: column;
+  margin-top: 4px;
 }
-.dropdown a, .dropdown button {
-  padding: 0.5rem 1rem;
-  text-align: left;
-  background: none;
-  border: none;
-  cursor: pointer;
+
+.dropdown a,
+.dropdown button {
+  padding: 10px 16px;
   width: 100%;
+  font-size: 0.95rem;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  transition: background 0.2s;
 }
 .dropdown a:hover,
 .dropdown button:hover {
-  background-color: #f0f0f0;
+  background-color: #f7f7f7;
+  outline: none;
 }
+
+.dropdown a {
+  text-decoration: none;
+  color: #333;
+}
+
+.dropdown button {
+  font: inherit;
+  color: #333;
+}
+
+/* Optional separator line style */
+.dropdown .separator {
+  height: 1px;
+  background: #eaeaea;
+  margin: 8px 0;
+}
+
+/* Smooth transition for menu appearance (optional) */
 </style>
