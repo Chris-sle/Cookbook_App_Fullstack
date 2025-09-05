@@ -38,7 +38,7 @@ function closeMenu() {
 function logout() {
   auth.clearToken()
   closeMenu()
-  router.push('/') // or another route
+  router.push('/') // or another route (placeholder home route here)
 }
 
 function handleDocumentClick(e) {
