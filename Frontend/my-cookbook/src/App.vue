@@ -7,6 +7,7 @@
         <router-link to="/recipes/add">Add Recipe</router-link>
         <router-link to="/favorites">Favorites</router-link>
       </nav>
+      <UserMenu style="margin-left:auto" />
     </header>
 
     <div class="global-status" v-if="recipesStore.loading || recipesStore.error">
@@ -23,6 +24,7 @@
 <script setup>
 import { onMounted } from 'vue'
 import { useRecipesStore } from './stores/recipes'
+import UserMenu from './components/userMenu.vue'
 
 const recipesStore = useRecipesStore()
 
