@@ -1,13 +1,11 @@
 const cors = require('cors');
 const express = require('express');
 const helmet = require('helmet');
-const pool = require('./db');
-const authenticateToken = require('./middleware/auth');
-const errorHandler = require('./middleware/errorHandler');
 const adminRoutes = require('./routes/admin');
 const favoritesRoutes = require('./routes/favorites');
 const recipeRoutes = require('./routes/recipes');
 const userRoutes = require('./routes/users');
+const errorHandler = require('./middleware/errorHandler');
 const { json } = require('express');
 
 const app = express();
@@ -67,8 +65,8 @@ app.use(express.json());
 app.use(json()); // For parsing JSON requests
 
 // Mount routes
-app.use('/api/admin', authenticateToken, adminRoutes);
-app.use('/api/favorites', authenticateToken, favoritesRoutes);
+app.use('/api/admin', adminRoutes);
+app.use('/api/favorites', favoritesRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/users', userRoutes);
 
