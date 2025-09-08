@@ -1,18 +1,21 @@
 <template>
   <div class="user-menu" ref="menuRef">
-    <!-- Button to toggle dropdown (stop propagation so document click doesn't immediately close it) -->
+    <!-- Button to toggle menu -->
     <button class="menu-button" @click.stop="toggleMenu">
       ☰ Profile
     </button>
 
     <!-- Dropdown menu -->
     <div v-if="menuOpen" class="dropdown">
-      <div v-if="!isAuthenticated">
-        <router-link to="/login" @click="closeMenu">Login</router-link>
-        <router-link to="/register" @click="closeMenu">Register</router-link>
-      </div>
-      <div v-else>
+      <!-- If logged in, show username and logout -->
+      <div v-if="isAuthenticated" class="user-info">
+        <div class="username">Hello, {{ auth.username }}</div>
         <button @click="logout">Logout</button>
+      </div>
+      <!-- If not logged in, show LoginForm and Register link -->
+      <div v-else>
+        <login-form @success="closeMenu" />
+        <router-link to="/register" @click="closeMenu">Register</router-link>
       </div>
     </div>
   </div>
@@ -22,6 +25,7 @@
 import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import LoginForm from './LoginForm.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -38,13 +42,13 @@ function closeMenu() {
 function logout() {
   auth.clearToken()
   closeMenu()
-  router.push('/') // or another route (placeholder home route here)
+  router.push('/') // home or other route
 }
 
+// outside click detection
 function handleDocumentClick(e) {
   const el = menuRef.value
   if (!el) return
-  // If click is outside the menu element, close the menu
   if (!el.contains(e.target)) {
     closeMenu()
   }
@@ -88,47 +92,38 @@ const isAuthenticated = computed(() => auth.isAuthenticated)
   border: 1px solid #ddd;
   border-radius: 8px;
   box-shadow: 0 4px 12px rgba(0,0,0,0.1);
-  min-width: 180px;
+  min-width: 200px;
   z-index: 1000;
   padding: 8px 0;
   display: flex;
   flex-direction: column;
-  margin-top: 4px;
+  gap: 8px;
 }
 
-.dropdown a,
-.dropdown button {
-  padding: 10px 16px;
-  width: 100%;
-  font-size: 0.95rem;
+/* Show username and logout button when logged in */
+.user-info {
+  display: flex;
+  flex-direction: column;
+  padding: 0 12px;
+  align-items: stretch;
+}
+.username {
+  font-weight: bold;
+  margin-bottom: 8px;
+}
+button {
+  padding: 8px 12px;
+  background-color: #007bff;
+  color: #333;
   border: none;
-  background: transparent;
-  text-align: left;
+  border-radius: 4px;
   cursor: pointer;
-  transition: background 0.2s;
+  font-weight: 600;
+  transition: background-color 0.2s;
 }
-.dropdown a:hover,
-.dropdown button:hover {
-  background-color: #f7f7f7;
-  outline: none;
-}
-
-.dropdown a {
-  text-decoration: none;
-  color: #333;
+button:hover {
+  background-color: #0056b3;
 }
 
-.dropdown button {
-  font: inherit;
-  color: #333;
-}
-
-/* Optional separator line style */
-.dropdown .separator {
-  height: 1px;
-  background: #eaeaea;
-  margin: 8px 0;
-}
-
-/* Smooth transition for menu appearance (optional) */
+/* Styles for LoginForm inside dropdown placed here if needed, but you already have it */
 </style>
