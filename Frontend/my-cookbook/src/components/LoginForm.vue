@@ -52,8 +52,14 @@ async function submit() {
       throw new Error('No token returned from server')
     }
 
-    // Save token (persisted to localStorage by the store)
-    auth.setToken(token)
+    const user = res.data?.user
+    if (user) {
+      // Map backend fields to the store shape (store expects userId, username)
+      auth.setToken(token, { userId: user.id, username: user.username })
+    } else {
+      // Fallback: just store token
+      auth.setToken(token)
+    }
 
     // Notify parent that login succeeded so it can close the dropdown
     emit('success')
