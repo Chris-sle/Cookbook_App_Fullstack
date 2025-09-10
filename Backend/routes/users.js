@@ -43,22 +43,38 @@ router.post(
     const { username, password } = req.body;
 
     try {
-      const user = await pool.query('SELECT * FROM users WHERE username = $1', [username]);
+      const result = await pool.query(
+        'SELECT id, username, password, is_admin FROM users WHERE username = $1',
+        [username]
+      );
 
-      if (user.rows.length === 0) {
-        return res.status(401).json({ message: 'Invalid credentials' });
+      if (result.rows.length === 0) {
+        return res.status(401).json({ message: 'Invalid username' });
       }
 
-      const validPassword = await bcrypt.compare(password, user.rows[0].password);
+      const user = result.rows[0];
 
+      const validPassword = await bcrypt.compare(password, user.password);
       if (!validPassword) {
-        return res.status(401).json({ message: 'Invalid credentials' });
+        return res.status(401).json({ message: 'Invalid password' });
       }
 
-      const token = jwt.sign({ user_id: user.rows[0].id, is_admin: user.rows[0].is_admin }, process.env.JWT_SECRET, { expiresIn: '1h' });
+      const token = jwt.sign(
+        { user_id: user.id, username: user.username, is_admin: user.is_admin },
+        process.env.JWT_SECRET,
+        { expiresIn: '1h' }
+      );
 
-      res.json({ token });
+      return res.json({
+        token,
+        user: {
+          id: user.id,
+          username: user.username,
+          is_admin: user.is_admin
+        }
+      });
     } catch (err) {
+      console.error('Login error:', err);
       res.status(500).json({ message: 'Server error' });
     }
   }
