@@ -28,10 +28,14 @@
           No ingredients added yet.
         </div>
 
-        <div class="ingredient-row" v-for="(ing, idx) in ingredients" :key="ing.tempId">
+        <div
+          class="ingredient-row"
+          v-for="(ing, idx) in ingredients"
+          :key="ing.tempId"
+        >
           <div class="small-field">
-            <label>Ingredient ID</label>
-            <input v-model.number="ing.ingredient_id" type="number" min="1" required />
+            <label>Ingredient name</label>
+            <input v-model.trim="ing.name" type="text" placeholder="e.g. Tomato" required />
           </div>
 
           <div class="small-field">
@@ -67,37 +71,36 @@ const router = useRouter()
 const auth = useAuthStore()
 const recipesStore = useRecipesStore()
 
-// Protect route (redirect to login if not authenticated)
+// Redirect to login if not authenticated
 onMounted(() => {
   if (!auth.isAuthenticated) {
     router.push('/login')
+  } else {
+    // start with one ingredient row for convenience
+    if (ingredients.length === 0) addIngredientRow()
   }
 })
 
 const title = ref('')
 const image_url = ref('')
 const instructions = ref('')
-const ingredients = reactive([]) // array of { ingredient_id, quantity, tempId }
+const ingredients = reactive([]) // array of { name, quantity, tempId }
 const loading = ref(false)
 const error = ref('')
 const success = ref('')
 
-// helper to add a new ingredient row
 function addIngredientRow() {
   ingredients.push({
-    ingredient_id: null,
+    name: '',
     quantity: '',
-    // tempId used so v-for has unique key even if ingredient_id is empty
     tempId: Date.now() + Math.random(),
   })
 }
 
-// remove row by index
 function removeIngredientRow(index) {
   ingredients.splice(index, 1)
 }
 
-// basic client-side validation
 function validate() {
   if (!title.value.trim()) {
     error.value = 'Title is required'
@@ -112,15 +115,14 @@ function validate() {
     return false
   }
   for (const ing of ingredients) {
-    if (!ing.ingredient_id || isNaN(Number(ing.ingredient_id)) || Number(ing.ingredient_id) <= 0) {
-      error.value = 'Each ingredient must have a valid ingredient_id (number)'
+    if (!ing.name || !ing.name.trim()) {
+      error.value = 'Each ingredient must have a name'
       return false
     }
   }
   return true
 }
 
-// submit handler - assemble payload and POST to API
 async function submit() {
   error.value = ''
   success.value = ''
@@ -133,8 +135,9 @@ async function submit() {
     title: title.value,
     instructions: instructions.value,
     image_url: image_url.value || null,
+    // Send ingredients as { name, quantity } - backend will upsert and return IDs
     ingredients: ingredients.map((ing) => ({
-      ingredient_id: Number(ing.ingredient_id),
+      name: (ing.name || '').trim(),
       quantity: ing.quantity || null,
     })),
   }
@@ -142,21 +145,21 @@ async function submit() {
   try {
     const res = await api.post('/recipes', payload)
     success.value = res.data?.message || 'Recipe created'
+
     // Clear local form
     title.value = ''
     image_url.value = ''
     instructions.value = ''
-    ingredients.splice(0) // clear array
+    ingredients.splice(0)
 
     // Clear recipes cache so list will fetch fresh data next time
-    if (recipesStore && recipesStore.clearCache) {
+    if (recipesStore && typeof recipesStore.clearCache === 'function') {
       recipesStore.clearCache()
     }
 
     // Redirect to recipes list
     router.push('/recipes')
   } catch (err) {
-    // normalize error
     error.value =
       err.response?.data?.message ||
       err.response?.data ||
