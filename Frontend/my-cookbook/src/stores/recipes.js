@@ -27,6 +27,7 @@ export const useRecipesStore = defineStore('recipes', {
         const res = await api.get('/recipes/search') // per your API: returns array
         this.recipes = Array.isArray(res.data) ? res.data : []
         this.lastFetched = Date.now()
+        console.log('Fetched recipes:', this.recipes)
         return this.recipes
       } catch (err) {
         // Normalize error message
