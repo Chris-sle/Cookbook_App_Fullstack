@@ -33,9 +33,31 @@
           v-for="(ing, idx) in ingredients"
           :key="ing.tempId"
         >
-          <div class="small-field">
+          <div class="small-field autocomplete-field">
             <label>Ingredient name</label>
-            <input v-model.trim="ing.name" type="text" placeholder="e.g. Tomato" required />
+            <input
+              v-model="ing.name"
+              type="text"
+              placeholder="e.g. Tomato"
+              @input="onIngredientInput(idx)"
+              @keydown.down.prevent="highlightNext(idx)"
+              @keydown.up.prevent="highlightPrev(idx)"
+              @keydown.enter.prevent="selectHighlighted(idx)"
+              autocomplete="off"
+              required
+            />
+
+            <!-- suggestions dropdown -->
+            <ul v-if="suggestionsMap[idx] && suggestionsMap[idx].length" class="suggestions">
+              <li
+                v-for="(s, sIdx) in suggestionsMap[idx]"
+                :key="s.id"
+                :class="{ highlighted: sIdx === highlightedMap[idx] }"
+                @mousedown.prevent="selectSuggestion(idx, s)"
+              >
+                {{ s.name }}
+              </li>
+            </ul>
           </div>
 
           <div class="small-field">
@@ -71,36 +93,140 @@ const router = useRouter()
 const auth = useAuthStore()
 const recipesStore = useRecipesStore()
 
+const title = ref('')
+const image_url = ref('')
+const instructions = ref('')
+const ingredients = reactive([]) // { name, quantity, tempId }
+const loading = ref(false)
+const error = ref('')
+const success = ref('')
+
+// suggestionsMap: index -> array of suggestion objects
+const suggestionsMap = reactive({})
+// timers for debouncing per row
+const timers = {}
+// which suggestion index is highlighted for keyboard navigation per row
+const highlightedMap = reactive({})
+
 // Redirect to login if not authenticated
 onMounted(() => {
   if (!auth.isAuthenticated) {
     router.push('/login')
   } else {
-    // start with one ingredient row for convenience
     if (ingredients.length === 0) addIngredientRow()
   }
 })
 
-const title = ref('')
-const image_url = ref('')
-const instructions = ref('')
-const ingredients = reactive([]) // array of { name, quantity, tempId }
-const loading = ref(false)
-const error = ref('')
-const success = ref('')
-
 function addIngredientRow() {
+  const idx = ingredients.length
   ingredients.push({
     name: '',
     quantity: '',
     tempId: Date.now() + Math.random(),
   })
+  suggestionsMap[idx] = []
+  highlightedMap[idx] = -1
 }
 
 function removeIngredientRow(index) {
   ingredients.splice(index, 1)
+  // clean up suggestion structures (rebuild maps)
+  // easier to rebuild maps entirely
+  rebuildSuggestionMaps()
 }
 
+function rebuildSuggestionMaps() {
+  const newSuggestions = {}
+  const newHighlighted = {}
+  for (let i = 0; i < ingredients.length; i++) {
+    newSuggestions[i] = suggestionsMap[i] || []
+    newHighlighted[i] = highlightedMap[i] || -1
+  }
+  // clear old and reassign
+  Object.keys(suggestionsMap).forEach(k => delete suggestionsMap[k])
+  Object.keys(highlightedMap).forEach(k => delete highlightedMap[k])
+  Object.assign(suggestionsMap, newSuggestions)
+  Object.assign(highlightedMap, newHighlighted)
+}
+
+// called when user types in an ingredient name input
+function onIngredientInput(index) {
+  const val = (ingredients[index].name || '').trim()
+
+  // Clear suggestions immediately if input is empty
+  if (!val) {
+    if (timers[index]) {
+      clearTimeout(timers[index])
+      delete timers[index]
+    }
+    suggestionsMap[index] = []
+    highlightedMap[index] = -1
+    return
+  }
+
+  // Set debounce timer
+  if (timers[index]) {
+    clearTimeout(timers[index])
+  }
+  timers[index] = setTimeout(async () => {
+    await fetchSuggestionsFor(index, val)
+  }, 300)
+}
+
+async function fetchSuggestionsFor(index, q) {
+    // If q is empty, just clear suggestions immediately
+  if (!q.trim()) {
+    suggestionsMap[index] = []
+    highlightMap[index] = -1
+    return
+  }
+
+  try {
+    const res = await api.get('/ingredients', { params: { q, limit: 10 } })
+    suggestionsMap[index] = Array.isArray(res.data) ? res.data : []
+    highlightedMap[index] = -1
+  } catch (err) {
+    // For autocomplete errors, just clear suggestions (don't block form)
+    suggestionsMap[index] = []
+    highlightedMap[index] = -1
+    console.error('Ingredient suggestions error', err)
+  }
+}
+
+function selectSuggestion(index, suggestion) {
+  // suggestion: { id, name }
+  ingredients[index].name = suggestion.name
+  // optionally store id if you want to send ids instead of names:
+  // ingredients[index].ingredient_id = suggestion.id
+  suggestionsMap[index] = []
+  highlightedMap[index] = -1
+}
+
+function highlightNext(index) {
+  const list = suggestionsMap[index] || []
+  if (!list.length) return
+  let cur = highlightedMap[index] ?? -1
+  cur = Math.min(cur + 1, list.length - 1)
+  highlightedMap[index] = cur
+}
+
+function highlightPrev(index) {
+  const list = suggestionsMap[index] || []
+  if (!list.length) return
+  let cur = highlightedMap[index] ?? -1
+  cur = Math.max(cur - 1, 0)
+  highlightedMap[index] = cur
+}
+
+function selectHighlighted(index) {
+  const list = suggestionsMap[index] || []
+  const cur = highlightedMap[index] ?? -1
+  if (cur >= 0 && cur < list.length) {
+    selectSuggestion(index, list[cur])
+  }
+}
+
+// client-side validation
 function validate() {
   if (!title.value.trim()) {
     error.value = 'Title is required'
@@ -135,7 +261,6 @@ async function submit() {
     title: title.value,
     instructions: instructions.value,
     image_url: image_url.value || null,
-    // Send ingredients as { name, quantity } - backend will upsert and return IDs
     ingredients: ingredients.map((ing) => ({
       name: (ing.name || '').trim(),
       quantity: ing.quantity || null,
@@ -151,12 +276,12 @@ async function submit() {
     image_url.value = ''
     instructions.value = ''
     ingredients.splice(0)
+    rebuildSuggestionMaps()
 
-    // Clear recipes cache so list will fetch fresh data next time
+    // Clear recipes cache
     if (recipesStore && typeof recipesStore.clearCache === 'function') {
       recipesStore.clearCache()
     }
-
     // Redirect to recipes list
     router.push('/recipes')
   } catch (err) {
@@ -277,5 +402,42 @@ async function submit() {
 
 .success {
   color: #186a3b;
+}
+
+.autocomplete-field {
+  position: relative; /* important for absolute positioning inside */
+  width: 100%;
+}
+
+.suggestions {
+  list-style: none;
+  margin: 4px 0 0 0;
+  padding: 0;
+  position: absolute;
+  top: 100%; /* Align below input */
+  left: 0;
+  right: 0; /* match input width */
+  z-index: 200;
+  background: #fff;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+/* Optional: add some spacing so that the suggestions don't overlap the input tighty */
+.autocomplete-field {
+  padding-bottom: 2px;
+}
+
+.suggestions li {
+  padding: 8px 12px;
+  cursor: pointer;
+}
+
+.suggestions li:hover,
+.suggestions li.highlighted {
+  background: #f3f4f6;
 }
 </style>
