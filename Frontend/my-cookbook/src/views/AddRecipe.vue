@@ -49,16 +49,15 @@
             />
 
             <!-- suggestions dropdown -->
-            <ul v-if="suggestionsMap[idx] && suggestionsMap[idx].length" class="suggestions">
-              <li
-                v-for="(s, sIdx) in suggestionsMap[idx]"
-                :key="s.id"
-                :class="{ highlighted: sIdx === highlightedMap[idx] }"
-                @mousedown.prevent="selectSuggestion(idx, s)"
-              >
-                {{ s.name }}
-              </li>
-            </ul>
+            <DropdownList
+                v-if="suggestionsMap[idx] && suggestionsMap[idx].length"
+                :items="suggestionsMap[idx]"
+                :highlightedIndex="highlightedMap[idx]"
+                :getItemId="getItemId(idx)"
+                :getActiveDescendantId="() => getActiveDescendantId(idx)"
+                @select="item => selectSuggestion(idx, item)"
+                :loading="loadingSuggestions[idx]"
+            />
           </div>
 
           <div class="small-field">
@@ -89,6 +88,7 @@ import { useRouter } from 'vue-router'
 import api from '../services/api'
 import { useAuthStore } from '../stores/auth'
 import { useRecipesStore } from '../stores/recipes'
+import DropdownList from '../components/DropdownList.vue'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -106,6 +106,8 @@ const success = ref('')
 const suggestionsMap = reactive({})
 // highlighted index for keyboard nav: index -> number
 const highlightedMap = reactive({})
+// loading state per input index
+const loadingSuggestions = reactive({}) 
 // debounce timers per input index
 const timers = {}
 // container ref to detect outside clicks and hide suggestions
@@ -129,6 +131,15 @@ onBeforeUnmount(() => {
     clearTimeout(timers[k])
   }
 })
+
+function getItemId(index) {
+  return (i) => `suggestion-${index}-${i}`
+}
+
+function getActiveDescendantId(index) {
+  const cur = highlightedMap[index] ?? -1
+  return cur >= 0 ? `suggestion-${index}-${cur}` : null
+}
 
 function addIngredientRow() {
   const idx = ingredients.length
@@ -207,24 +218,37 @@ function onIngredientInput(index) {
  */
 async function fetchSuggestionsFor(index, q) {
   try {
-    // ensure we still want suggestions for this index and q hasn't changed
-    const current = (ingredients[index]?.name || '').trim()
-    if (!current || current.toLowerCase() !== q.toLowerCase()) {
-      // user changed input since timer scheduled; ignore this fetch result
+    loadingSuggestions[index] = true
+    const currentVal = (ingredients[index]?.name || '').trim()
+    if (!currentVal || currentVal.toLowerCase() !== q.toLowerCase()) {
       suggestionsMap[index] = []
       highlightedMap[index] = -1
       return
     }
-
     const res = await api.get('/ingredients', { params: { q, limit: 10 } })
-    suggestionsMap[index] = Array.isArray(res.data) ? res.data : []
+    suggestionsMap[index] = dedupeSuggestions(res.data || [])
     highlightedMap[index] = -1
   } catch (err) {
-    // On error, clear suggestions silently; do not block form
     suggestionsMap[index] = []
     highlightedMap[index] = -1
-    console.error('Ingredient suggestions fetch failed', err)
+    console.error('Suggestions fetch failed:', err)
+  } finally {
+    loadingSuggestions[index] = false
   }
+}
+
+// Remove duplicates from suggestions based on id or name (case-insensitive)
+function dedupeSuggestions(items) {
+  const seen = new Set()
+  const out = []
+  for (const item of items || []) {
+    const key = item.id ? `id:${item.id}` : `name:${String(item.name || '').trim().toLowerCase()}`
+    if (!seen.has(key)) {
+      seen.add(key)
+      out.push(item)
+    }
+  }
+  return out
 }
 
 /**
@@ -356,150 +380,152 @@ async function submit() {
 
 <style scoped>
 .add-recipe {
-  max-width: 900px;
-  margin: 20px auto;
-  background: #fff;
-  padding: 18px;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+    max-width: 900px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 18px;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
 }
 
 .add-recipe h2 {
-  margin: 0 0 12px;
+    margin: 0 0 12px;
 }
 
 .recipe-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
 }
 
 .field {
-  display: flex;
-  flex-direction: column;
+    display: flex;
+    flex-direction: column;
 }
 
 .field label {
-  font-weight: 600;
-  margin-bottom: 6px;
+    font-weight: 600;
+    margin-bottom: 6px;
 }
 
 .field input,
 .field textarea {
-  padding: 8px 10px;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  font-size: 1rem;
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 1rem;
 }
 
 /* Ingredients area */
 .ingredients-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 0 6px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6px;
 }
 
 .add-btn {
-  background: #eef6ff;
-  border: 1px solid #cfe3ff;
-  color: #007bff;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
+    background: #eef6ff;
+    border: 1px solid #cfe3ff;
+    color: #007bff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
 .ingredient-row {
-  display: flex;
-  gap: 8px;
-  align-items: flex-end;
-  padding: 6px;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding: 6px;
 }
 
 .small-field {
-  display: flex;
-  flex-direction: column;
-  flex: 1;
+    display: flex;
+    flex-direction: column;
+    flex: 1;
 }
 
 .small-field input {
-  padding: 6px 8px;
-  border: 1px solid #eee;
-  border-radius: 6px;
+    padding: 6px 8px;
+    border: 1px solid #eee;
+    border-radius: 6px;
 }
 
 /* Indicator for rows that matched existing ingredient (selected suggestion) */
 .ingredient-row.matched {
-  background: #f8fffb;
-  border-left: 3px solid #16a34a;
-  padding-left: 4px;
-  border-radius: 6px;
+    background: #f8fffb;
+    border-left: 3px solid #16a34a;
+    padding-left: 4px;
+    border-radius: 6px;
 }
 
 /* remove button */
 .remove-btn {
-  background: #fff4f4;
-  border: 1px solid #ffd0d0;
-  color: #b32;
-  padding: 6px 10px;
-  border-radius: 6px;
-  cursor: pointer;
+    background: #fff4f4;
+    border: 1px solid #ffd0d0;
+    color: #b32;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
 /* Actions */
 .actions {
-  display: flex;
-  justify-content: flex-end;
+    display: flex;
+    justify-content: flex-end;
 }
 
 .actions button {
-  padding: 8px 14px;
-  border: none;
-  border-radius: 6px;
-  background: #007bff;
-  color: white;
-  cursor: pointer;
-  font-weight: 600;
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
 }
 
 .error {
-  color: #c0392b;
+    color: #c0392b;
 }
 
 .success {
-  color: #186a3b;
+    color: #186a3b;
 }
 
 /* Autocomplete specifics */
 .autocomplete-field {
-  position: relative;
-  width: 100%;
+    position: relative;
+    width: 100%;
 }
 
 .suggestions {
-  list-style: none;
-  margin: 6px 0 0 0;
-  padding: 6px 0;
-  position: absolute;
-  top: 100%; /* place below input */
-  left: 0;
-  right: 0;
-  z-index: 200;
-  background: #fff;
-  border: 1px solid #ddd;
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(15,23,42,0.06);
-  max-height: 220px;
-  overflow-y: auto;
+    list-style: none;
+    margin: 6px 0 0 0;
+    padding: 6px 0;
+    position: absolute;
+    top: 100%; /* place below input */
+    left: 0;
+    right: 0;
+    z-index: 300;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+    max-height: 220px;
+    overflow-y: auto;
 }
 
 .suggestions li {
-  padding: 8px 12px;
-  cursor: pointer;
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 12px;
+    cursor: pointer;
 }
 
 .suggestions li:hover,
 .suggestions li.highlighted {
-  background: #f3f4f6;
+    background: #f3f4f6;
 }
 </style>
