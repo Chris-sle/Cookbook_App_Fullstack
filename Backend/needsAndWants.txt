@@ -70,6 +70,29 @@ Indexes:
 Foreign-key constraints:
     "favorites_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
 -------------------------------------------------------------------------------------------------------------
+                                                       Table "public.categories"
+ Column |  Type   | Collation | Nullable |                Default                 | Storage  | Compression | Stats target | Description
+--------+---------+-----------+----------+----------------------------------------+----------+-------------+--------------+-------------
+ id     | integer |           | not null | nextval('categories_id_seq'::regclass) | plain    |             |              |
+ name   | text    |           | not null |                                        | extended |             |              |
+Indexes:
+    "categories_pkey" PRIMARY KEY, btree (id)
+    "idx_categories_name_lower" UNIQUE, btree (lower(name))
+Referenced by:
+    TABLE "recipe_categories" CONSTRAINT "recipe_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+Access method: heap
+-------------------------------------------------------------------------------------------------------------
+                                      Table "public.recipe_categories"
+   Column    |  Type   | Collation | Nullable | Default | Storage | Compression | Stats target | Description
+-------------+---------+-----------+----------+---------+---------+-------------+--------------+-------------
+ recipe_id   | integer |           | not null |         | plain   |             |              |
+ category_id | integer |           | not null |         | plain   |             |              |
+Indexes:
+    "recipe_categories_pkey" PRIMARY KEY, btree (recipe_id, category_id)
+Foreign-key constraints:
+    "recipe_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
+    "recipe_categories_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
+
 
 API setup:
 1. Authentication & Authorization Middleware. - Done
