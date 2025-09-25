@@ -6,6 +6,7 @@ const favoritesRoutes = require('./routes/favorites');
 const recipeRoutes = require('./routes/recipes');
 const userRoutes = require('./routes/users');
 const ingredientsRoutes = require('./routes/ingredients')
+const categoriesRouter = require('./routes/categories');
 const errorHandler = require('./middleware/errorHandler');
 const { json } = require('express');
 
@@ -71,6 +72,7 @@ app.use('/api/favorites', favoritesRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ingredients', ingredientsRoutes)
+app.use('/categories', categoriesRouter);
 
 // Error handling 
 app.use(errorHandler);
