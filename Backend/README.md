@@ -68,10 +68,12 @@ CREATE DATABASE recipe_db;
 4. **Create tables (run all together):**
 
 ```sql
--- Drop existing tables if any
+-- Drop existing tables (order matters because of FKs)
 DROP TABLE IF EXISTS favorites;
+DROP TABLE IF EXISTS recipe_categories;
 DROP TABLE IF EXISTS recipe_ingredients;
 DROP TABLE IF EXISTS recipes;
+DROP TABLE IF EXISTS categories;
 DROP TABLE IF EXISTS users;
 
 -- Create users
@@ -108,6 +110,22 @@ CREATE TABLE recipe_ingredients (
   ingredient_id INTEGER REFERENCES ingredients(id),
   quantity VARCHAR(50),
   PRIMARY KEY (recipe_id, ingredient_id)
+);
+
+-- Create categories
+CREATE TABLE categories (
+  id SERIAL PRIMARY KEY,
+  name TEXT NOT NULL
+);
+
+-- prevent case-insensitive duplicates while preserving original casing
+CREATE UNIQUE INDEX idx_categories_name_lower ON categories (lower(name));
+
+-- join table for recipes & categories (many-to-many)
+CREATE TABLE recipe_categories (
+  recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  category_id INTEGER NOT NULL REFERENCES categories(id) ON DELETE CASCADE,
+  PRIMARY KEY (recipe_id, category_id)
 );
 
 -- Create favorites (many-to-many)
