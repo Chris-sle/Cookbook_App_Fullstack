@@ -72,7 +72,7 @@ app.use('/api/favorites', favoritesRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ingredients', ingredientsRoutes)
-app.use('/categories', categoriesRouter);
+app.use('/api/categories', categoriesRouter);
 
 // Error handling 
 app.use(errorHandler);
