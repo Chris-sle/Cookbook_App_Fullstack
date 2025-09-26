@@ -151,7 +151,7 @@ router.post(
   }
 );
 
-// keep your recipe search GET handler below (unchanged)
+// GET /api/recipes/search?ingredient_id=1
 router.get(
   '/search',
   [
@@ -160,15 +160,46 @@ router.get(
   ],
   async (req, res, next) => {
     const { ingredient_id } = req.query;
-    let queryText = `
-      SELECT DISTINCT r.* FROM recipes r
-      JOIN recipe_ingredients ri ON r.id = ri.recipe_id
-    `;
     const params = [];
-    if (ingredient_id) {
-      params.push(parseInt(ingredient_id, 10));
-      queryText += ` WHERE ri.ingredient_id = $1`;
+    let whereClause = '';
+
+    if (ingredient_id != null) {
+      const id = parseInt(ingredient_id, 10);
+      if (Number.isNaN(id)) return res.status(400).json({ error: 'ingredient_id must be an integer' });
+      params.push(id);
+      whereClause = `WHERE EXISTS (
+        SELECT 1 FROM recipe_ingredients ri2
+        WHERE ri2.recipe_id = r.id AND ri2.ingredient_id = $1
+      )`;
     }
+
+    const queryText = `
+      SELECT
+        r.*,
+        u.username AS author_username,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', i.id,
+            'name', i.name,
+            'quantity', ri.quantity
+          )) FROM recipe_ingredients ri
+            JOIN ingredients i ON ri.ingredient_id = i.id
+          WHERE ri.recipe_id = r.id
+        ), '[]'::json) AS ingredients,
+        COALESCE((
+          SELECT json_agg(json_build_object(
+            'id', c.id,
+            'name', c.name
+          )) FROM recipe_categories rc
+            JOIN categories c ON rc.category_id = c.id
+          WHERE rc.recipe_id = r.id
+        ), '[]'::json) AS categories
+      FROM recipes r
+      LEFT JOIN users u ON r.author_id = u.id
+      ${whereClause}
+      ORDER BY r.created_at DESC
+    `;
+
     try {
       const results = await pool.query(queryText, params.length ? params : undefined);
       res.json(results.rows);
