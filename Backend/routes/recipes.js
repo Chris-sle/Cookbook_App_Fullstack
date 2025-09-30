@@ -151,58 +151,135 @@ router.post(
   }
 );
 
-// GET /api/recipes/search?ingredient_id=1
+// GET /api/recipes/search?ingredient_id=1,2&category_id=3&q=soup&page=1&limit=20
 router.get(
   '/search',
   [
-    query('ingredient_id').optional().isInt().withMessage('ingredient_id must be an integer'),
+    // simple validator for integer params; we also validate/parse in code for arrays
+    query('page').optional().isInt({ min: 1 }).withMessage('page must be >= 1'),
+    query('limit').optional().isInt({ min: 1, max: 100 }).withMessage('limit must be 1-100'),
     validationHandler
   ],
   async (req, res, next) => {
-    const { ingredient_id } = req.query;
-    const params = [];
-    let whereClause = '';
-
-    if (ingredient_id != null) {
-      const id = parseInt(ingredient_id, 10);
-      if (Number.isNaN(id)) return res.status(400).json({ error: 'ingredient_id must be an integer' });
-      params.push(id);
-      whereClause = `WHERE EXISTS (
-        SELECT 1 FROM recipe_ingredients ri2
-        WHERE ri2.recipe_id = r.id AND ri2.ingredient_id = $1
-      )`;
-    }
-
-    const queryText = `
-      SELECT
-        r.*,
-        u.username AS author_username,
-        COALESCE((
-          SELECT json_agg(json_build_object(
-            'id', i.id,
-            'name', i.name,
-            'quantity', ri.quantity
-          )) FROM recipe_ingredients ri
-            JOIN ingredients i ON ri.ingredient_id = i.id
-          WHERE ri.recipe_id = r.id
-        ), '[]'::json) AS ingredients,
-        COALESCE((
-          SELECT json_agg(json_build_object(
-            'id', c.id,
-            'name', c.name
-          )) FROM recipe_categories rc
-            JOIN categories c ON rc.category_id = c.id
-          WHERE rc.recipe_id = r.id
-        ), '[]'::json) AS categories
-      FROM recipes r
-      LEFT JOIN users u ON r.author_id = u.id
-      ${whereClause}
-      ORDER BY r.created_at DESC
-    `;
-
     try {
-      const results = await pool.query(queryText, params.length ? params : undefined);
-      res.json(results.rows);
+      // Parse and normalize incoming query params
+      const rawIngredient = req.query.ingredient_id;
+      const rawCategory = req.query.category_id;
+      const q = req.query.q ? String(req.query.q).trim() : null;
+
+      // Pagination
+      const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+      const limit = Math.min(100, Math.max(1, parseInt(req.query.limit, 10) || 20));
+      const offset = (page - 1) * limit;
+
+      // Helper: parse id lists from comma-separated string, array, or single value.
+      const parseIdList = (raw) => {
+        if (raw == null) return null;
+        // If array (repeated query param), flatten into string
+        const str = Array.isArray(raw) ? raw.join(',') : String(raw);
+        const parts = str.split(',').map(s => s.trim()).filter(Boolean);
+        if (parts.length === 0) return null;
+        const nums = parts.map(p => {
+          const n = Number(p);
+          if (!Number.isInteger(n)) throw new Error(`Invalid id value: ${p}`);
+          return n;
+        });
+        // remove duplicates
+        return Array.from(new Set(nums));
+      };
+
+      let ingredientIds = null;
+      let categoryIds = null;
+      try {
+        ingredientIds = parseIdList(rawIngredient);
+        categoryIds = parseIdList(rawCategory);
+      } catch (e) {
+        return res.status(400).json({ error: e.message });
+      }
+
+      // Build dynamic WHERE conditions and params array
+      const conditions = [];
+      const params = [];
+
+      if (ingredientIds && ingredientIds.length > 0) {
+        // pass PostgreSQL integer array as a single parameter
+        params.push(ingredientIds);
+        conditions.push(`EXISTS (
+          SELECT 1 FROM recipe_ingredients ri2
+          WHERE ri2.recipe_id = r.id AND ri2.ingredient_id = ANY($${params.length}::int[])
+        )`);
+      }
+
+      if (categoryIds && categoryIds.length > 0) {
+        params.push(categoryIds);
+        conditions.push(`EXISTS (
+          SELECT 1 FROM recipe_categories rc2
+          WHERE rc2.recipe_id = r.id AND rc2.category_id = ANY($${params.length}::int[])
+        )`);
+      }
+
+      if (q) {
+        // Use ILIKE for simple case-insensitive substring match
+        params.push(`%${q}%`);
+        conditions.push(`(r.title ILIKE $${params.length} OR r.instructions ILIKE $${params.length})`);
+      }
+
+      const whereClause = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+      // Count query to get total distinct recipes matching filters
+      const countQuery = `
+        SELECT COUNT(DISTINCT r.id) AS total
+        FROM recipes r
+        ${whereClause}
+      `;
+
+      const countResult = await pool.query(countQuery, params.length ? params : undefined);
+      const total = parseInt(countResult.rows[0].total, 10) || 0;
+
+      // Data query with aggregations and pagination
+      // Note: LIMIT and OFFSET are passed as parameters appended to the params array
+      params.push(limit);
+      params.push(offset);
+      const dataQuery = `
+        SELECT
+          r.*,
+          u.username AS author_username,
+          COALESCE((
+            SELECT json_agg(json_build_object(
+              'id', i.id,
+              'name', i.name,
+              'quantity', ri.quantity
+            )) FROM recipe_ingredients ri
+              JOIN ingredients i ON ri.ingredient_id = i.id
+            WHERE ri.recipe_id = r.id
+          ), '[]'::json) AS ingredients,
+          COALESCE((
+            SELECT json_agg(json_build_object(
+              'id', c.id,
+              'name', c.name
+            )) FROM recipe_categories rc
+              JOIN categories c ON rc.category_id = c.id
+            WHERE rc.recipe_id = r.id
+          ), '[]'::json) AS categories
+        FROM recipes r
+        LEFT JOIN users u ON r.author_id = u.id
+        ${whereClause}
+        ORDER BY r.created_at DESC
+        LIMIT $${params.length - 1} OFFSET $${params.length}
+      `;
+
+      const dataResult = await pool.query(dataQuery, params);
+      const recipes = dataResult.rows;
+
+      // Return paginated response with meta
+      return res.json({
+        data: recipes,
+        meta: {
+          total,
+          page,
+          limit
+        }
+      });
     } catch (err) {
       next(err);
     }
