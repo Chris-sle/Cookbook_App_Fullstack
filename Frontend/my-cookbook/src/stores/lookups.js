@@ -14,7 +14,7 @@ export const useLookupsStore = defineStore('lookups', () => {
 
   // helpers
   function normalizeKey(q) {
-    return String(q || '').trim().toLowerCase()
+    return String(q || '').trim().toLowerCase()  
   }
 
   // load all categories (GET /categories/suggest). cached unless force=true
