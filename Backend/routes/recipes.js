@@ -1,6 +1,6 @@
 const express = require('express');
 const createError = require('http-errors');
-const { body, query } = require('express-validator');
+const { body, param, query } = require('express-validator');
 const router = express.Router();
 const pool = require('../db');
 const authenticateToken = require('../middleware/auth');

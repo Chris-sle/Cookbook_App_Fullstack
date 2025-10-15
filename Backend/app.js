@@ -4,6 +4,7 @@ const helmet = require('helmet');
 const adminRoutes = require('./routes/admin');
 const favoritesRoutes = require('./routes/favorites');
 const recipeRoutes = require('./routes/recipes');
+const recipeActivityRoutes = require('./routes/recipeActivity');
 const userRoutes = require('./routes/users');
 const ingredientsRoutes = require('./routes/ingredients')
 const categoriesRouter = require('./routes/categories');
@@ -70,6 +71,7 @@ app.use(json()); // For parsing JSON requests
 app.use('/api/admin', adminRoutes);
 app.use('/api/favorites', favoritesRoutes);
 app.use('/api/recipes', recipeRoutes);
+app.use('/api/recipes/activity', recipeActivityRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/ingredients', ingredientsRoutes)
 app.use('/api/categories', categoriesRouter);
