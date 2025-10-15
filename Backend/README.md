@@ -72,8 +72,12 @@ CREATE DATABASE recipe_db;
 DROP TABLE IF EXISTS favorites;
 DROP TABLE IF EXISTS recipe_categories;
 DROP TABLE IF EXISTS recipe_ingredients;
+DROP TABLE IF EXISTS recipe_click_logs;
+DROP TABLE IF EXISTS recipe_clicks;
+DROP TABLE IF EXISTS recipe_votes;
 DROP TABLE IF EXISTS recipes;
 DROP TABLE IF EXISTS categories;
+DROP TABLE IF EXISTS ingredients;
 DROP TABLE IF EXISTS users;
 
 -- Create users
@@ -88,13 +92,16 @@ CREATE TABLE users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
--- Create recipes with image_url
+-- Create recipes with image_url and optional counters
 CREATE TABLE recipes (
   id SERIAL PRIMARY KEY,
   title VARCHAR(150) NOT NULL,
   instructions TEXT NOT NULL,
-  image_url TEXT, -- new column for images
+  image_url TEXT,
   author_id INTEGER REFERENCES users(id),
+  upvotes INTEGER NOT NULL DEFAULT 0,
+  downvotes INTEGER NOT NULL DEFAULT 0,
+  vote_score INTEGER NOT NULL DEFAULT 0,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
@@ -134,6 +141,28 @@ CREATE TABLE favorites (
   recipe_id INTEGER REFERENCES recipes(id),
   PRIMARY KEY (user_id, recipe_id)
 );
+
+-- Voting and click tracking tables
+CREATE TABLE recipe_votes (
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  recipe_id INTEGER NOT NULL REFERENCES recipes(id) ON DELETE CASCADE,
+  vote SMALLINT NOT NULL CHECK (vote IN (1, -1)),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  updated_at TIMESTAMP WITH TIME ZONE DEFAULT now(),
+  PRIMARY KEY (user_id, recipe_id)
+);
+
+CREATE TABLE recipe_clicks (
+  recipe_id INTEGER PRIMARY KEY REFERENCES recipes(id) ON DELETE CASCADE,
+  clicks BIGINT NOT NULL DEFAULT 0
+);
+
+CREATE TABLE recipe_click_logs (
+  id BIGSERIAL PRIMARY KEY,
+  recipe_id INTEGER REFERENCES recipes(id) ON DELETE CASCADE,
+  user_id INTEGER REFERENCES users(id),
+  created_at TIMESTAMP WITH TIME ZONE DEFAULT now()
+);
 ```
 
 ---
@@ -164,9 +193,19 @@ http://localhost:5000
 
 ### Recipe Endpoints
 - **POST /api/recipes** — Add a new recipe (requires auth)
-- **GET /api/recipes/search** — Search recipes by ingredient or other filters
+- **GET /api/recipes/search** — Search recipes with filters:
+  - ingredient_id(s): comma-separated or repeated params
+  - category_id(s): comma-separated or repeated params
+  - q: text search (title/instructions)
+  - page & limit for pagination
 - **PUT /api/recipes/:id** — Update recipe
 - **DELETE /api/recipes/:id** — Delete recipe (admin)
+
+### Recipe Activity Endpoints
+- **POST /api/recipes/:id/click** — Record a recipe click (can be called anonymously or authenticated)
+- **POST /api/recipes/:id/vote** — Upvote or downvote a recipe (requires auth)
+- **GET /api/recipes/:id/vote** — Get vote counts and your vote state
+- **DELETE /api/recipes/:id/vote** — Remove your vote (requires auth)
 
 ### Favorites Endpoints
 - **POST /api/favorites/:recipeId** — Add recipe to favorites
@@ -179,7 +218,7 @@ http://localhost:5000
 - **POST /api/admin/users/:id/ban** — Ban user
 - **POST /api/admin/users/:id/suspend** — Suspend user
 - **POST /api/admin/promote/:id** — Promote user to admin
-- **GET /api/admin/logistics** — Stats: total users, recipes, etc.
+- **GET /api/admin/logistics** — Stats: total users, recipes, votes, clicks, etc.
 
 ---
 
