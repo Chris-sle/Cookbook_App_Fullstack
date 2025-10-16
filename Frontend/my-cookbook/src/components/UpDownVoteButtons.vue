@@ -40,27 +40,34 @@ const loading = ref(false)
 async function fetchVotes() {
   try {
     const res = await api.get(`/recipes/activity/${recipeId}/vote`)
-    upvotes.value = res.data.upvotes || 0
+    console.log('Vote data:', res.data)
     downvotes.value = res.data.downvotes || 0
+    upvotes.value = res.data.upvotes || 0
     score.value = res.data.score || 0
-    myVote.value = res.data.my_vote || 0
+    // only update myVote if present (user logged in)
+    if ('my_vote' in res.data) myVote.value = res.data.my_vote
+    console.log('My vote:', myVote.value)
   } catch (err) {
-    console.error('Failed to fetch votes:', err)
+    // possibly user not logged in or API error
+    // fallback: keep myVote as is or set to 0
+    console.warn('Failed to fetch vote info:', err)
   }
 }
 
 // cast or remove vote: clicking active toggles to 0
-async function cast(v) {
+async function castVote(vote) {
   if (loading.value) return
   loading.value = true
   try {
-    const res = await api.post(`/recipes/activity/${recipeId}/vote`, { vote: v })
-    upvotes.value = res.data.upvotes || 0
-    downvotes.value = res.data.downvotes || 0
-    score.value = res.data.score || 0
-    myVote.value = res.data.my_vote || 0
+    const res = await api.post(`/recipes/activity/${recipeId}/vote`, { vote })
+    // Update counts
+    upvotes.value = res.data.upvotes
+    downvotes.value = res.data.downvotes
+    score.value = res.data.score
+    // Update local vote state to reflect UI immediately
+    myVote.value = res.data.my_vote
   } catch (err) {
-    console.error('Vote error', err)
+    console.error('Vote error:', err)
   } finally {
     loading.value = false
   }
@@ -68,11 +75,11 @@ async function cast(v) {
 
 function onUpClick() {
   const target = myVote.value === 1 ? 0 : 1
-  cast(target)
+  castVote(target)
 }
 function onDownClick() {
   const target = myVote.value === -1 ? 0 : -1
-  cast(target)
+  castVote(target)
 }
 
 onMounted(fetchVotes)
