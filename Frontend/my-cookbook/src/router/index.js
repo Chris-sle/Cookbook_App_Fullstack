@@ -3,6 +3,7 @@ import Login from '../views/Login.vue'
 import Register from '../views/Register.vue'
 import Recipes from '../views/Recipes.vue'
 import AddRecipe from '../views/AddRecipe.vue'
+import RecipeDetails from '../views/RecipeDetails.vue'
 import Favorites from '../views/Favorites.vue'
 import { useAuthStore } from '../stores/auth' // if needed for route guards
 
@@ -11,6 +12,7 @@ const routes = [
   { path: '/login', component: Login },
   { path: '/register', component: Register },
   { path: '/recipes', component: Recipes },
+  { path: '/recipes/:id', component: RecipeDetails, props: true },
   { path: '/recipes/add', component: AddRecipe }, // protect in future if needed
   { path: '/favorites', component: Favorites },
 ]
