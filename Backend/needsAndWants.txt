@@ -130,6 +130,7 @@ Foreign-key constraints:
     "recipe_clicks_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
 Access method: heap
 ---------------------------------------------------------------------------------------------------------------
+                                        Table: "recipe_click_logs"
    Column   |           Type           | Collation | Nullable |                    Default                    | Storage | Compression | Stats target | Description
 ------------+--------------------------+-----------+----------+-----------------------------------------------+---------+-------------+--------------+-------------
  id         | bigint                   |           | not null | nextval('recipe_click_logs_id_seq'::regclass) | plain   |             |              |
