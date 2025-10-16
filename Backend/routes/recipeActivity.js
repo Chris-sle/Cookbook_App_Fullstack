@@ -1,6 +1,7 @@
 const express = require('express');
 const createError = require('http-errors');
 const { body, param } = require('express-validator');
+const jwt = require('jsonwebtoken');
 const router = express.Router();
 const pool = require('../db');
 const authenticateToken = require('../middleware/auth');
@@ -65,7 +66,7 @@ router.post(
 /**
  * Helper: fetch current aggregates and user's vote
  */
-async function fetchVoteState(client, recipeId, userId = null) {
+async function fetchVoteState(client, recipeId, userId) {
   // Check if recipes table has upvotes/downvotes/vote_score columns
   const recipeCols = await client.query(`
     SELECT column_name FROM information_schema.columns
@@ -212,39 +213,39 @@ router.post(
  * GET /recipes/:id/vote
  * Returns aggregates and (if authenticated) the current user's vote
  */
-router.get(
-  '/:id/vote',
-  [
-    param('id').isInt().withMessage('id must be an integer'),
-    validationHandler
-  ],
-  async (req, res, next) => {
-    const recipeId = parseInt(req.params.id, 10);
-    const userId = req.user ? req.user.user_id : null;
+router.get('/:id/vote', async (req, res, next) => {
+  const recipeId = parseInt(req.params.id, 10);
+  let userId = null;
 
-    const client = await pool.connect();
+  // Check if token is in headers
+  const token = req.header('x-auth-token');
+
+  if (token) {
+    // verify token manually
     try {
-      // ensure recipe exists
-      const r = await client.query('SELECT id FROM recipes WHERE id = $1 LIMIT 1', [recipeId]);
-      if (r.rows.length === 0) {
-        return next(createError(404, 'Recipe not found'));
-      }
-
-      const state = await fetchVoteState(client, recipeId, userId);
-      return res.json({
-        recipe_id: recipeId,
-        my_vote: state.my_vote,
-        upvotes: state.upvotes,
-        downvotes: state.downvotes,
-        score: state.score
-      });
+      const decoded = jwt.verify(token, process.env.JWT_SECRET);
+      userId = decoded.user_id;
     } catch (err) {
-      next(err);
-    } finally {
-      client.release();
+      // invalid token: treat as non-authenticated
+      userId = null;
     }
   }
-);
+
+  // ensure recipe exists
+  const r = await pool.query('SELECT id FROM recipes WHERE id = $1 LIMIT 1', [recipeId]);
+  if (r.rows.length === 0) {
+    return next(createError(404, 'Recipe not found'));
+  }
+
+  const state = await fetchVoteState(pool, recipeId, userId);
+  return res.json({
+    recipe_id: recipeId,
+    my_vote: state.my_vote,
+    upvotes: state.upvotes,
+    downvotes: state.downvotes,
+    score: state.score
+  });
+});
 
 /**
  * DELETE /recipes/:id/vote
