@@ -154,7 +154,7 @@ function clearFilters() {
 }
 
 function goToRecipeDetails(id) {
-  router.push({ name: 'RecipeDetails', params: { id } })
+  router.push(`/recipes/${id}`)
 }
 
 // initial load
