@@ -1,7 +1,6 @@
 <template>
   <div class="recipe-details">
-    <div v-if="loading" class="loading">Loading recipe…</div>
-    <div v-else-if="error" class="error">{{ error }}</div>
+    <div v-if="!recipe" class="loading">Loading recipe…</div>
     <div v-else>
       <div class="header">
         <h1>{{ recipe.title }}</h1>
@@ -12,27 +11,30 @@
           </div>
         </div>
       </div>
-
+      
+      <!-- Main content: image + ingredients side-by-side -->
       <div class="top-row">
-        <div class="image-wrap">
-          <img :src="recipe.image_url || placeholderImage" :alt="recipe.title" />
+        <div class="image-section">
+          <img
+            :src="recipe.image_url || placeholderImage"
+            :alt="recipe.title"
+            class="recipe-image"
+          />
         </div>
-
-        <div class="actions-panel">
+        <div class="vote-section">
           <UpDownVoteButtons :recipeId="recipe.id" />
-          <div class="clicks" v-if="clicks !== null">Clicks: {{ clicks }}</div>
+        </div>
+        <div class="ingredients-section">
+          <h3>Ingredients</h3>
+          <ul>
+            <li v-for="ing in recipe.ingredients || []" :key="ing.id">
+              {{ ing.name }}<span v-if="ing.quantity"> — {{ ing.quantity }}</span>
+            </li>
+          </ul>
         </div>
       </div>
-
-      <section class="ingredients">
-        <h3>Ingredients</h3>
-        <ul>
-          <li v-for="ing in recipe.ingredients || []" :key="ing.id">
-            {{ ing.name }} <span v-if="ing.quantity">— {{ ing.quantity }}</span>
-          </li>
-        </ul>
-      </section>
-
+      
+      <!-- Instructions below -->
       <section class="instructions">
         <h3>Instructions</h3>
         <p v-if="recipe.instructions">{{ recipe.instructions }}</p>
@@ -43,122 +45,116 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { onMounted, ref, computed } from 'vue'
+import { useRecipesStore } from '../stores/recipes'
 import { useRoute } from 'vue-router'
-import api from '../services/api'
 import UpDownVoteButtons from '../components/UpDownVoteButtons.vue'
 
 const route = useRoute()
-const id = Number(route.params.id)
+const { id } = route.params
 
-const recipe = ref(null)
-const loading = ref(true)
-const error = ref(null)
-const clicks = ref(null)
-
-const placeholderImage = 'https://via.placeholder.com/800x450?text=No+Image'
-
-async function fetchRecipe() {
-  loading.value = true
-  error.value = null
-  try {
-    // Prefer GET /recipes/:id if available; using /recipes/search as fallback
-    let res
-    try {
-      res = await api.get(`/recipes/${id}`) // try dedicated endpoint first
-      recipe.value = res.data
-    } catch (e) {
-      // fallback: search endpoint that returns array
-      const r2 = await api.get('/recipes/search', { params: { id } })
-      const data = Array.isArray(r2.data) ? r2.data[0] : r2.data?.data?.[0] || null
-      recipe.value = data
-    }
-
-    if (!recipe.value) throw new Error('Recipe not found')
-  } catch (err) {
-    console.error('Failed to load recipe', err)
-    error.value = err.response?.data?.message || err.message || 'Failed to load recipe'
-  } finally {
-    loading.value = false
+const recipesStore = useRecipesStore()
+onMounted(async () => {
+  if (!recipesStore.hasRecipes) {
+    await recipesStore.fetchRecipes()
   }
-}
+  recipe.value = recipesStore.getRecipeById(recipeId)
+  // Optional: watch recipe for null and handle loading/error
+})
+const recipe = computed(() => recipesStore.getRecipeById(Number(id)))
+console.log('Loaded recipe:', recipe.value)
 
-// record click on mount
+const placeholderImage = 'https://via.placeholder.com/300x200?text=No+Image'
+
+// Record click on mount
 async function recordClick() {
   try {
-    const res = await api.post(`/recipes/activity/${id}/click`)
-    clicks.value = res.data?.clicks ?? null
+    await api.post(`/recipes/activity/${id}/click`)
   } catch (err) {
-    // don't block the page on click errors; just log
-    console.warn('Failed to record click', err)
+    console.warn('Failed to record click:', err)
   }
 }
 
-onMounted(async () => {
-  await fetchRecipe()
-  // Only record click if recipe loaded
-  if (recipe.value) {
-    recordClick()
-  }
-})
+if (recipe.value) {
+  recordClick()
+}
 </script>
 
 <style scoped>
 .recipe-details {
-  max-width: 900px;
+  max-width: 1000px;
   margin: 20px auto;
   padding: 0 12px;
 }
-.loading, .error {
-  padding: 20px;
-  text-align: center;
-}
+
+/* Header styles */
 .header h1 {
   margin: 0 0 8px;
 }
+
 .meta {
   display: flex;
   gap: 12px;
   align-items: center;
+  font-size: 0.9rem;
   color: #555;
-  margin-bottom: 12px;
+  margin-bottom: 16px;
 }
 .categories .category {
   background: #f0f0f0;
-  padding: 4px 8px;
   border-radius: 6px;
+  padding: 4px 8px;
   font-size: 0.85rem;
 }
+
+/* Main layout: side-by-side image + ingredients + vote */
 .top-row {
   display: flex;
-  gap: 18px;
+  gap: 20px;
+  flex-wrap: wrap;
   align-items: flex-start;
-  margin-bottom: 18px;
+  margin-bottom: 20px;
 }
-.image-wrap img {
+
+/* Image styling */
+.image-section {
+  flex: 1 1 250px;
+}
+.recipe-image {
+  max-width: 300px;
   width: 100%;
-  max-width: 520px;
-  height: auto;
   border-radius: 8px;
   object-fit: cover;
 }
-.actions-panel {
-  min-width: 140px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  align-items: flex-start;
+
+.vote-section {
+  flex: 0 0 120px;
 }
-.clicks {
-  font-size: 0.9rem;
-  color: #444;
+
+/* Ingredients list styling */
+.ingredients-section {
+  flex: 1 1 250px;
 }
-.ingredients ul {
-  list-style: disc;
-  padding-left: 20px;
+.ingredients-section ul {
+  list-style: disc inside;
+  margin: 0;
+  padding: 0;
+}
+.ingredients-section li {
+  margin-bottom: 4px;
+}
+
+/* Instructions styling */
+.instructions {
+  margin-top: 30px;
+}
+.instructions h3 {
+  margin-bottom: 10px;
 }
 .instructions p {
   white-space: pre-wrap;
 }
-.muted { color: #888; }
+.muted {
+  color: #888;
+}
 </style>
