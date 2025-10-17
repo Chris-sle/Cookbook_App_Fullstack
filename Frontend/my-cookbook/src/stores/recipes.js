@@ -16,32 +16,25 @@ export const useRecipesStore = defineStore('recipes', {
 
   actions: {
     async fetchRecipes({ force = false } = {}) {
-      // If we have recipes and not forcing, skip network call
       if (!force && this.recipes.length > 0) {
         return this.recipes
       }
-
+      console.log('Fetching recipes...');
       this.loading = true
       this.error = null
       try {
-        const res = await api.get('/recipes/search') // per your API: returns array
-        this.recipes = Array.isArray(res.data) ? res.data : []
+        const res = await api.get('/recipes/search')
+        // Correct: extract recipes from res.data
+        this.recipes = Array.isArray(res.data?.data) ? res.data.data : []
         this.lastFetched = Date.now()
-        console.log('Fetched recipes:', this.recipes)
+        console.log('Recipes after fetch:', this.recipes)
         return this.recipes
       } catch (err) {
-        // Normalize error message
         this.error = err.response?.data?.message || err.message || 'Failed to fetch recipes'
         throw err
       } finally {
         this.loading = false
       }
-    },
-
-    // optional helper to clear cache (e.g., after adding a recipe)
-    clearCache() {
-      this.recipes = []
-      this.lastFetched = null
     }
   }
 })
