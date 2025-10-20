@@ -1,24 +1,24 @@
 <template>
-    <form class="login-form" @submit.prevent="submit">
-        <div class="field">
-            <label for="username">Username</label>
-            <input id="username" v-model="username" type="text" required />
-        </div>
+  <form class="login-form" @submit.prevent="submit">
+    <div class="field">
+      <label for="username">Username</label>
+      <input id="username" v-model="username" type="text" required />
+    </div>
 
-        <div class="field">
-            <label for="password">Password</label>
-            <input id="password" v-model="password" type="password" required />
-        </div>
+    <div class="field">
+      <label for="password">Password</label>
+      <input id="password" v-model="password" type="password" required />
+    </div>
 
-        <div class="actions">
-            <button type="submit" :disabled="loading">
-                <span v-if="loading">Signing in…</span>
-                <span v-else>Sign in</span>
-            </button>
-        </div>
-        
-        <p class="error" v-if="error">{{ error }}</p>
-    </form>
+    <div class="actions">
+      <button type="submit" :disabled="loading">
+        <span v-if="loading">Signing in…</span>
+        <span v-else>Sign in</span>
+      </button>
+    </div>
+
+    <p class="error" v-if="error">{{ error }}</p>
+  </form>
 </template>
 
 <script setup>
@@ -42,12 +42,17 @@ async function submit() {
   error.value = ''
   loading.value = true
   try {
-    const res = await api.post('/users/login', {
+    const res = await api.post('/auth/login', {
       username: username.value,
       password: password.value,
     })
 
-    const token = res.data?.token
+    console.log('Login response:', res.data);
+    if (!res.data?.accessToken) {
+      console.error('No token in response!');
+    }
+    
+    const token = res.data?.accessToken
     if (!token) {
       throw new Error('No token returned from server')
     }
