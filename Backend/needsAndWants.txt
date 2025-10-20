@@ -145,6 +145,22 @@ Foreign-key constraints:
     "recipe_click_logs_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
 Access method: heap
 ---------------------------------------------------------------------------------------------------------------
+                                                                  Table "public.refresh_tokens"
+   Column   |           Type           | Collation | Nullable |                  Default                   | Storage  | Compression | Stats target | Description
+------------+--------------------------+-----------+----------+--------------------------------------------+----------+-------------+--------------+-------------
+ id         | integer                  |           | not null | nextval('refresh_tokens_id_seq'::regclass) | plain    |             |              |
+ user_id    | integer                  |           | not null |                                            | plain    |             |              |
+ token      | text                     |           | not null |                                            | extended |             |              |
+ user_agent | text                     |           |          |                                            | extended |             |              |
+ ip         | text                     |           |          |                                            | extended |             |              |
+ created_at | timestamp with time zone |           |          | now()                                      | plain    |             |              |
+ expires_at | timestamp with time zone |           | not null |                                            | plain    |             |              |
+Indexes:
+    "refresh_tokens_pkey" PRIMARY KEY, btree (id)
+Foreign-key constraints:
+    "refresh_tokens_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+Access method: heap
+---------------------------------------------------------------------------------------------------------------
 
 API setup:
 1. Authentication & Authorization Middleware. - Done
