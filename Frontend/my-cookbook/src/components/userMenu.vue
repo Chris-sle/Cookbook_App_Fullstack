@@ -10,7 +10,7 @@
       <!-- If logged in, show username and logout -->
       <div v-if="isAuthenticated" class="user-info">
         <div class="username">Hello, {{ auth.username }}</div>
-        <button @click="logout">Logout</button>
+        <logout-button />
       </div>
       <!-- If not logged in, show LoginForm and Register link -->
       <div v-else>
@@ -26,6 +26,7 @@ import { ref, computed, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import LoginForm from './LoginForm.vue'
+import LogoutButton from './logoutButton.vue'
 
 const auth = useAuthStore()
 const router = useRouter()
@@ -38,11 +39,6 @@ function toggleMenu() {
 }
 function closeMenu() {
   menuOpen.value = false
-}
-function logout() {
-  auth.clearToken()
-  closeMenu()
-  router.push('/') // home or other route
 }
 
 // outside click detection
