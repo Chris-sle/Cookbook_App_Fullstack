@@ -2,6 +2,7 @@ const cors = require('cors');
 const express = require('express');
 const helmet = require('helmet');
 const adminRoutes = require('./routes/admin');
+const authRoutes = require('./routes/auth');
 const favoritesRoutes = require('./routes/favorites');
 const recipeRoutes = require('./routes/recipes');
 const recipeActivityRoutes = require('./routes/recipeActivity');
@@ -10,6 +11,8 @@ const ingredientsRoutes = require('./routes/ingredients')
 const categoriesRouter = require('./routes/categories');
 const errorHandler = require('./middleware/errorHandler');
 const { json } = require('express');
+const cookieParser = require('cookie-parser');
+
 
 const app = express();
 const PORT = process.env.PORT || 5000;
@@ -66,6 +69,7 @@ app.use(
 
 app.use(express.json());
 app.use(json()); // For parsing JSON requests
+app.use(cookieParser()); // For parsing cookies
 
 // Mount routes
 app.use('/api/admin', adminRoutes);
@@ -73,6 +77,7 @@ app.use('/api/favorites', favoritesRoutes);
 app.use('/api/recipes', recipeRoutes);
 app.use('/api/recipes/activity', recipeActivityRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/auth', authRoutes);
 app.use('/api/ingredients', ingredientsRoutes)
 app.use('/api/categories', categoriesRouter);
 
