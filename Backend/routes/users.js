@@ -2,11 +2,12 @@ const express = require('express');
 const router = express.Router();
 const pool = require('../db');
 const bcrypt = require('bcrypt');
-const jwt = require('jsonwebtoken');
 const { body } = require('express-validator');
 const validationHandler = require('../middleware/validationHandler');
+const authenticateToken = require('../middleware/auth');
 
-// Register a new user
+
+// POST /users/register
 router.post(
   '/register',
   [
@@ -17,106 +18,67 @@ router.post(
   ],
   async (req, res) => {
     const { username, email, password } = req.body;
-    const hashedPassword = await bcrypt.hash(password, 10);
-
     try {
+      const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await pool.query(
         'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id',
         [username, email, hashedPassword]
       );
       res.json({ message: 'User registered', user_id: newUser.rows[0].id });
     } catch (err) {
+      console.error('Register error:', err);
       res.status(500).json({ message: 'Server error' });
     }
   }
 );
 
-// User login
-router.post(
-  '/login',
-  [
-    body('username').notEmpty().withMessage('Username is required'),
-    body('password').notEmpty().withMessage('Password is required'),
-    validationHandler
-  ],
-  async (req, res) => {
-    const { username, password } = req.body;
-
-    try {
-      const result = await pool.query(
-        'SELECT id, username, password, is_admin FROM users WHERE username = $1',
-        [username]
-      );
-
-      if (result.rows.length === 0) {
-        return res.status(401).json({ message: 'Invalid username' });
-      }
-
-      const user = result.rows[0];
-
-      const validPassword = await bcrypt.compare(password, user.password);
-      if (!validPassword) {
-        return res.status(401).json({ message: 'Invalid password' });
-      }
-
-      const token = jwt.sign(
-        { user_id: user.id, username: user.username, is_admin: user.is_admin },
-        process.env.JWT_SECRET,
-        { expiresIn: '1h' }
-      );
-
-      return res.json({
-        token,
-        user: {
-          id: user.id,
-          username: user.username,
-          is_admin: user.is_admin
-        }
-      });
-    } catch (err) {
-      console.error('Login error:', err);
-      res.status(500).json({ message: 'Server error' });
-    }
-  }
-);
-
-// Edit user
+// Edit user details
+// PUT /users/:id
 router.put(
   '/:id',
   [
     body('email').isEmail().optional().withMessage('A valid email is required'),
     body('password').isLength({ min: 6 }).optional().withMessage('Password must be at least 6 characters long'),
-    validationHandler
+    validationHandler,
+    authenticateToken
   ],
   async (req, res) => {
     const { id } = req.params;
     const { email, password } = req.body;
 
-    try {
-      if (email) {
-        await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, id]);
-      }
+text
 
-      if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, id]);
-      }
+try {
+  if (email) {
+    await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, id]);
+  }
 
-      res.json({ message: 'User updated' });
-    } catch (err) {
-      res.status(500).json({ message: 'Server error' });
-    }
+  if (password) {
+    const hashedPassword = await bcrypt.hash(password, 10);
+    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, id]);
+  }
+
+  res.json({ message: 'User updated' });
+} catch (err) {
+  console.error('Update user error:', err);
+  res.status(500).json({ message: 'Server error' });
+}
   }
 );
 
-// Delete user
-router.delete('/:id', async (req, res) => {
+// DELETE /users/:id
+router.delete('/:id', authenticateToken, async (req, res) => {
   const { id } = req.params;
-
+  const requesterId = req.user && req.user.user_id;
+  const isAdmin = req.user && req.user.is_admin;
+  if (!isAdmin && Number(requesterId) !== Number(id)) {
+    return res.status(403).json({ message: 'Forbidden' });
+  }
   try {
     await pool.query('DELETE FROM users WHERE id = $1', [id]);
     res.json({ message: 'User deleted' });
   } catch (err) {
+    console.error('Delete user error:', err);
     res.status(500).json({ message: 'Server error' });
   }
 });
