@@ -25,8 +25,30 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import api from '../services/api'
+import { useAuthStore } from '../stores/auth'
+
+const auth = useAuthStore()
+
+// Watch for token changes
+watch(() => auth.token, (newToken) => {
+  if (newToken) {
+    // User logged in: fetch vote info
+    fetchVotes()
+  } else {
+    // User logged out: reset myVote
+    myVote.value = 0
+  }
+})
+
+// Also, fetch on mount if token is already available
+onMounted(() => {
+  if (auth.token) {
+    fetchVotes()
+  }
+})
+
 
 const { recipeId } = defineProps({ recipeId: { type: Number, required: true } })
 
