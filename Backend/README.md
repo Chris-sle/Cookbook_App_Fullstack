@@ -92,6 +92,17 @@ CREATE TABLE users (
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
 );
 
+-- Create refresh_tokens (used for refreshing tokens)
+CREATE TABLE refresh_tokens (
+  id SERIAL PRIMARY KEY,
+  user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL,
+  user_agent TEXT,
+  ip TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
 -- Create recipes with image_url and optional counters
 CREATE TABLE recipes (
   id SERIAL PRIMARY KEY,
@@ -186,38 +197,40 @@ http://localhost:5000
 ## API Usage Overview
 
 ### User Endpoints
-- **POST /api/users/register** — Register a new user
-- **POST /api/users/login** — Authenticate and get JWT token
-- **PUT /api/users/:id** — Update user info
-- **DELETE /api/users/:id** — Remove user
+- **POST /api/users/register** — Register a new user.
+- **POST /api/auth/login** — Authenticate and receive JWT token; sets refresh token cookie.
+- **POST /api/auth/logout** — Log out (clears refresh token cookie).
+- **POST /api/auth/refresh** — Refresh tokens, rotating and issuing a new access token.
+- **PUT /api/users/:id** — Update user info.
+- **DELETE /api/users/:id** — Remove user.
 
 ### Recipe Endpoints
-- **POST /api/recipes** — Add a new recipe (requires auth)
+- **POST /api/recipes** — Add a new recipe (requires auth).
 - **GET /api/recipes/search** — Search recipes with filters:
-  - ingredient_id(s): comma-separated or repeated params
-  - category_id(s): comma-separated or repeated params
-  - q: text search (title/instructions)
-  - page & limit for pagination
-- **PUT /api/recipes/:id** — Update recipe
-- **DELETE /api/recipes/:id** — Delete recipe (admin)
+  - ingredient_id(s): comma-separated or repeated params.
+  - category_id(s): comma-separated or repeated params.
+  - q: text search (title/instructions).
+  - page & limit for pagination.
+- **PUT /api/recipes/:id** — Update a recipe.
+- **DELETE /api/recipes/:id** — Delete a recipe (admin).
 
 ### Recipe Activity Endpoints
-- **POST /api/recipes/:id/click** — Record a recipe click (can be called anonymously or authenticated)
-- **POST /api/recipes/:id/vote** — Upvote or downvote a recipe (requires auth)
-- **GET /api/recipes/:id/vote** — Get vote counts and your vote state
-- **DELETE /api/recipes/:id/vote** — Remove your vote (requires auth)
+- **POST /api/recipes/:id/click** — Record a recipe click (can be called anonymously or with auth).
+- **POST /api/recipes/:id/vote** — Upvote or downvote a recipe (requires auth).
+- **GET /api/recipes/:id/vote** — Get vote counts and your vote state.
+- **DELETE /api/recipes/:id/vote** — Remove your vote (requires auth).
 
 ### Favorites Endpoints
-- **POST /api/favorites/:recipeId** — Add recipe to favorites
-- **DELETE /api/favorites/:recipeId** — Remove from favorites
-- **GET /api/favorites** — List your favorite recipes
+- **POST /api/favorites/:recipeId** — Add recipe to favorites.
+- **DELETE /api/favorites/:recipeId** — Remove from favorites.
+- **GET /api/favorites** — List your favorite recipes.
 
 ### Admin Endpoints
-- **GET /api/admin/users** — List users (paginated)
-- **DELETE /api/admin/users/:id** — Remove user
-- **POST /api/admin/users/:id/ban** — Ban user
-- **POST /api/admin/users/:id/suspend** — Suspend user
-- **POST /api/admin/promote/:id** — Promote user to admin
+- **GET /api/admin/users** — List users (paginated).
+- **DELETE /api/admin/users/:id** — Remove a user.
+- **POST /api/admin/users/:id/ban** — Ban a user.
+- **POST /api/admin/users/:id/suspend** — Suspend a user.
+- **POST /api/admin/promote/:id** — Promote a user to admin.
 - **GET /api/admin/logistics** — Stats: total users, recipes, votes, clicks, etc.
 
 ---
