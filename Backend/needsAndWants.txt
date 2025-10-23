@@ -1,165 +1,103 @@
 DB setup:
------------------------------------------------------------------------------------------------------
-                                           Table "public.users"
-     Column      |            Type             | Collation | Nullable |              Default
------------------+-----------------------------+-----------+----------+-----------------------------------
- id              | integer                     |           | not null | nextval('users_id_seq'::regclass)
- username        | character varying(150)      |           | not null |
- email           | character varying(150)      |           | not null |
- password        | character varying(150)      |           | not null |
- is_admin        | boolean                     |           |          | false
- created_at      | timestamp without time zone |           |          | CURRENT_TIMESTAMP
- status          | character varying(20)       |           |          | 'active'::character varying
- suspended_until | timestamp without time zone |           |          |
-------------------------------------------------------------------------------------------------------
-Indexes:
-    "users_pkey" PRIMARY KEY, btree (id)
-    "users_email_key" UNIQUE CONSTRAINT, btree (email)
-    "users_username_key" UNIQUE CONSTRAINT, btree (username)
-Referenced by:
-    TABLE "favorites" CONSTRAINT "favorites_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
-    TABLE "recipes" CONSTRAINT "recipes_author_id_fkey" FOREIGN KEY (author_id) REFERENCES users(id)
-------------------------------------------------------------------------------------------------------------
-                                                                    Table "public.recipes"
-    Column    |            Type             | Collation | Nullable |               Default               | Storage  | Compression | Stats target | Description
---------------+-----------------------------+-----------+----------+-------------------------------------+----------+-------------+--------------+-------------
- id           | integer                     |           | not null | nextval('recipes_id_seq'::regclass) | plain    |             |              |
- title        | character varying(150)      |           | not null |                                     | extended |             |              |
- instructions | text                        |           | not null |                                     | extended |             |              |
- image_url    | text                        |           |          |                                     | extended |             |              |
- author_id    | integer                     |           |          |                                     | plain    |             |              |
- created_at   | timestamp without time zone |           |          | CURRENT_TIMESTAMP                   | plain    |             |              |
- upvotes      | integer                     |           | not null | 0                                   | plain    |             |              |
- downvotes    | integer                     |           | not null | 0                                   | plain    |             |              |
- vote_score   | integer                     |           | not null | 0                                   | plain    |             |              |
----------------------------------------------------------------------------------------------------------------------------------------------------------------
-Indexes:
-    "recipes_pkey" PRIMARY KEY, btree (id)
-Foreign-key constraints:
-    "recipes_author_id_fkey" FOREIGN KEY (author_id) REFERENCES users(id)
-Referenced by:
-    TABLE "recipe_categories" CONSTRAINT "recipe_categories_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE    TABLE "recipe_click_logs" CONSTRAINT "recipe_click_logs_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE    TABLE "recipe_clicks" CONSTRAINT "recipe_clicks_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
-    TABLE "recipe_votes" CONSTRAINT "recipe_votes_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
-Access method: heap
--------------------------------------------------------------------------------------------------------------
-                   Table "public.recipe_ingredients"
-    Column     |         Type          | Collation | Nullable | Default
----------------+-----------------------+-----------+----------+---------
- recipe_id     | integer               |           | not null |
- ingredient_id | integer               |           | not null |
- quantity      | character varying(50) |           |          |
-------------------------------------------------------------------------
-Indexes:
-    "recipe_ingredients_pkey" PRIMARY KEY, btree (recipe_id, ingredient_id)
-Foreign-key constraints:
-    "recipe_ingredients_ingredient_id_fkey" FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)
--------------------------------------------------------------------------------------------------------------
-                                    Table "public.ingredients"
- Column |          Type          | Collation | Nullable |                 Default
---------+------------------------+-----------+----------+-----------------------------------------
- id     | integer                |           | not null | nextval('ingredients_id_seq'::regclass)
- name   | character varying(100) |           | not null |
----------------------------------------------------------------------------------------------------
-Indexes:
-    "ingredients_pkey" PRIMARY KEY, btree (id)
-    "ingredients_name_key" UNIQUE CONSTRAINT, btree (name)
-Referenced by:
-    TABLE "recipe_ingredients" CONSTRAINT "recipe_ingredients_ingredient_id_fkey" FOREIGN KEY (ingredient_id) REFERENCES ingredients(id)  
--------------------------------------------------------------------------------------------------------------
-               Table "public.favorites"
-  Column   |  Type   | Collation | Nullable | Default
------------+---------+-----------+----------+---------
- user_id   | integer |           | not null |
- recipe_id | integer |           | not null |
- ------------------------------------------------------
-Indexes:
-    "favorites_pkey" PRIMARY KEY, btree (user_id, recipe_id)
-Foreign-key constraints:
-    "favorites_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
--------------------------------------------------------------------------------------------------------------
-                                                       Table "public.categories"
- Column |  Type   | Collation | Nullable |                Default                 | Storage  | Compression | Stats target | Description
---------+---------+-----------+----------+----------------------------------------+----------+-------------+--------------+-------------
- id     | integer |           | not null | nextval('categories_id_seq'::regclass) | plain    |             |              |
- name   | text    |           | not null |                                        | extended |             |              |
-Indexes:
-    "categories_pkey" PRIMARY KEY, btree (id)
-    "idx_categories_name_lower" UNIQUE, btree (lower(name))
-Referenced by:
-    TABLE "recipe_categories" CONSTRAINT "recipe_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-Access method: heap
--------------------------------------------------------------------------------------------------------------
-                                      Table "public.recipe_categories"
-   Column    |  Type   | Collation | Nullable | Default | Storage | Compression | Stats target | Description
--------------+---------+-----------+----------+---------+---------+-------------+--------------+-------------
- recipe_id   | integer |           | not null |         | plain   |             |              |
- category_id | integer |           | not null |         | plain   |             |              |
-Indexes:
-    "recipe_categories_pkey" PRIMARY KEY, btree (recipe_id, category_id)
-Foreign-key constraints:
-    "recipe_categories_category_id_fkey" FOREIGN KEY (category_id) REFERENCES categories(id) ON DELETE CASCADE
-    "recipe_categories_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
----------------------------------------------------------------------------------------------------------------
-                                                 Table "public.recipe_votes"
-   Column   |           Type           | Collation | Nullable | Default | Storage | Compression | Stats target | Description
-------------+--------------------------+-----------+----------+---------+---------+-------------+--------------+-------------
- user_id    | integer                  |           | not null |         | plain   |             |              |
- recipe_id  | integer                  |           | not null |         | plain   |             |              |
- vote       | smallint                 |           | not null |         | plain   |             |              |
- created_at | timestamp with time zone |           |          | now()   | plain   |             |              |
- updated_at | timestamp with time zone |           |          | now()   | plain   |             |              |
-------------+--------------------------+-----------+----------+---------+---------+-------------+--------------+-------------
-Indexes:
-    "recipe_votes_pkey" PRIMARY KEY, btree (user_id, recipe_id)
-Check constraints:
-    "recipe_votes_vote_check" CHECK (vote = ANY (ARRAY[1, '-1'::integer]))
-Foreign-key constraints:
-    "recipe_votes_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
-    "recipe_votes_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-Access method: heap
----------------------------------------------------------------------------------------------------------------
-                                       Table "public.recipe_clicks"
-  Column   |  Type   | Collation | Nullable | Default | Storage | Compression | Stats target | Description
------------+---------+-----------+----------+---------+---------+-------------+--------------+-------------
- recipe_id | integer |           | not null |         | plain   |             |              |
- clicks    | bigint  |           | not null | 0       | plain   |             |              |
------------+---------+-----------+----------+---------+---------+-------------+--------------+-------------
-Indexes:
-    "recipe_clicks_pkey" PRIMARY KEY, btree (recipe_id)
-Foreign-key constraints:
-    "recipe_clicks_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
-Access method: heap
----------------------------------------------------------------------------------------------------------------
-                                        Table: "recipe_click_logs"
-   Column   |           Type           | Collation | Nullable |                    Default                    | Storage | Compression | Stats target | Description
-------------+--------------------------+-----------+----------+-----------------------------------------------+---------+-------------+--------------+-------------
- id         | bigint                   |           | not null | nextval('recipe_click_logs_id_seq'::regclass) | plain   |             |              |
- recipe_id  | integer                  |           |          |                                               | plain   |             |              |
- user_id    | integer                  |           |          |                                               | plain   |             |              |
- created_at | timestamp with time zone |           |          | now()                                         | plain   |             |              |
-------------+--------------------------+-----------+----------+-----------------------------------------------+---------+-------------+--------------+-------------
-Indexes:
-    "recipe_click_logs_pkey" PRIMARY KEY, btree (id)
-Foreign-key constraints:
-    "recipe_click_logs_recipe_id_fkey" FOREIGN KEY (recipe_id) REFERENCES recipes(id) ON DELETE CASCADE
-    "recipe_click_logs_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id)
-Access method: heap
----------------------------------------------------------------------------------------------------------------
-                                                                  Table "public.refresh_tokens"
-   Column   |           Type           | Collation | Nullable |                  Default                   | Storage  | Compression | Stats target | Description
-------------+--------------------------+-----------+----------+--------------------------------------------+----------+-------------+--------------+-------------
- id         | integer                  |           | not null | nextval('refresh_tokens_id_seq'::regclass) | plain    |             |              |
- user_id    | integer                  |           | not null |                                            | plain    |             |              |
- token      | text                     |           | not null |                                            | extended |             |              |
- user_agent | text                     |           |          |                                            | extended |             |              |
- ip         | text                     |           |          |                                            | extended |             |              |
- created_at | timestamp with time zone |           |          | now()                                      | plain    |             |              |
- expires_at | timestamp with time zone |           | not null |                                            | plain    |             |              |
-Indexes:
-    "refresh_tokens_pkey" PRIMARY KEY, btree (id)
-Foreign-key constraints:
-    "refresh_tokens_user_id_fkey" FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-Access method: heap
+public.users
+    Columns:
+        id uuid NOT NULL DEFAULT gen_random_uuid()
+        username varchar(150) NOT NULL
+        email varchar(150) NOT NULL
+        password varchar(150) NOT NULL
+        is_admin boolean DEFAULT false
+        status varchar(20) DEFAULT 'active'
+        suspended_until timestamptz
+        created_at timestamptz DEFAULT now()
+    Primary key: id
+    Indexes / constraints:
+    UNIQUE(username)
+    UNIQUE(email)
+    Referenced by: favorites(user_id), recipes(author_id), recipe_click_logs(user_id), refresh_tokens(user_id)
+
+public.recipes
+    Columns:
+        id uuid NOT NULL DEFAULT gen_random_uuid()
+        title varchar(150) NOT NULL
+        instructions text NOT NULL
+        image_url text
+        author_id uuid REFERENCES users(id)
+        upvotes integer NOT NULL DEFAULT 0
+        downvotes integer NOT NULL DEFAULT 0
+        vote_score integer NOT NULL DEFAULT 0
+        created_at timestamptz DEFAULT now()
+    Primary key: id
+    Referenced by: recipe_categories(recipe_id), recipe_click_logs(recipe_id), recipe_clicks(recipe_id), recipe_ingredients(recipe_id), recipe_votes(recipe_id), favorites(recipe_id)
+
+public.ingredients
+    Columns:
+        id uuid NOT NULL DEFAULT gen_random_uuid()
+        name varchar(100) NOT NULL
+    Primary key: id
+    Indexes:
+        UNIQUE(name)
+    Referenced by: recipe_ingredients(ingredient_id)
+
+public.recipe_ingredients
+    Columns:
+        recipe_id uuid NOT NULL REFERENCES recipes(id) ON DELETE CASCADE
+        ingredient_id uuid NOT NULL REFERENCES ingredients(id) ON DELETE CASCADE
+        quantity varchar(50)
+    Primary key: (recipe_id, ingredient_id)
+
+public.categories
+    Columns:
+        id uuid NOT NULL DEFAULT gen_random_uuid()
+        name text NOT NULL
+    Primary key: id
+    Indexes:
+        UNIQUE(lower(name)) — case-insensitive unique index
+        Referenced by: recipe_categories(category_id)
+
+public.recipe_categories
+    Columns:
+        recipe_id uuid NOT NULL REFERENCES recipes(id) ON DELETE CASCADE
+        category_id uuid NOT NULL REFERENCES categories(id) ON DELETE CASCADE
+    Primary key: (recipe_id, category_id)
+
+public.favorites
+    Columns:
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        recipe_id uuid NOT NULL REFERENCES recipes(id) ON DELETE CASCADE
+    Primary key: (user_id, recipe_id)
+
+public.recipe_votes
+    Columns:
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        recipe_id uuid NOT NULL REFERENCES recipes(id) ON DELETE CASCADE
+        vote smallint NOT NULL CHECK (vote IN (1, -1))
+        created_at timestamptz DEFAULT now()
+        updated_at timestamptz DEFAULT now()
+    Primary key: (user_id, recipe_id)
+
+public.recipe_clicks
+    Columns:
+        recipe_id uuid PRIMARY KEY REFERENCES recipes(id) ON DELETE CASCADE
+        clicks bigint NOT NULL DEFAULT 0
+
+public.recipe_click_logs
+    Columns:
+        id bigserial PRIMARY KEY
+        recipe_id uuid REFERENCES recipes(id) ON DELETE CASCADE
+        user_id uuid REFERENCES users(id)
+        created_at timestamptz DEFAULT now()
+
+public.refresh_tokens
+    Columns:
+        id uuid PRIMARY KEY DEFAULT gen_random_uuid()
+        user_id uuid NOT NULL REFERENCES users(id) ON DELETE CASCADE
+        token text NOT NULL
+        user_agent text
+        ip text
+        created_at timestamptz DEFAULT now()
+        expires_at timestamptz NOT NULL
+    Indexes:
+        (considering an index on token for lookups)
 ---------------------------------------------------------------------------------------------------------------
 
 API setup:
