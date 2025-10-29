@@ -87,7 +87,7 @@ async function registerUser() {
  * Returns { token, user } per our backend contract.
  */
 async function loginUser() {
-  const res = await api.post('/users/login', {
+  const res = await api.post('/auth/login', {
     username: username.value,
     password: password.value,
   })
