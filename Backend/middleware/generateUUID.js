@@ -9,6 +9,7 @@ function generateUniqueUUIDForTable(tableName) {
       let newId;
       while (exists) {
         newId = uuid();
+        console.log('Generated UUID:', newId);
         const result = await client.query(`SELECT 1 FROM ${tableName} WHERE id = $1`, [newId]);
         exists = result.rows.length > 0;
       }
