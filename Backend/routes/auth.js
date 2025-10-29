@@ -61,7 +61,7 @@ router.post(
         user: { id: user.id, username: user.username, is_admin: user.is_admin }
       });
     } catch (err) {
-      console.error('Login error:', err);
+      console.error('Login error:', err); //debugging
       res.status(500).json({ message: 'Server error' });
     } finally {
       client.release();
