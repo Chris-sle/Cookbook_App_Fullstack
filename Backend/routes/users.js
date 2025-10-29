@@ -5,6 +5,8 @@ const bcrypt = require('bcrypt');
 const { body } = require('express-validator');
 const validationHandler = require('../middleware/validationHandler');
 const authenticateToken = require('../middleware/auth');
+const generateUniqueUUIDForTable = require('../middleware/generateUUID');
+const generateUserId = generateUniqueUUIDForTable('users');
 
 
 // POST /users/register
@@ -16,13 +18,15 @@ router.post(
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
     validationHandler
   ],
+  generateUserId,
   async (req, res) => {
     const { username, email, password } = req.body;
+    const id = req.generatedId;
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await pool.query(
-        'INSERT INTO users (username, email, password) VALUES ($1, $2, $3) RETURNING id',
-        [username, email, hashedPassword]
+        'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING id',
+        [id, username, email, hashedPassword]
       );
       res.json({ message: 'User registered', user_id: newUser.rows[0].id });
     } catch (err) {
