@@ -6,6 +6,8 @@ const router = express.Router();
 const pool = require('../db');
 const authenticateToken = require('../middleware/auth');
 const validationHandler = require('../middleware/validationHandler');
+const generateUniqueUUIDForTable = require('../middleware/generateUUID');
+const validateUUIDFormat = require('../middleware/validateUUID');
 
 /**
  * POST /recipes/:id/click
@@ -15,11 +17,11 @@ const validationHandler = require('../middleware/validationHandler');
 router.post(
   '/:id/click',
   [
-    param('id').isInt().withMessage('id must be an integer'),
+    validateUUIDFormat,
     validationHandler
   ],
   async (req, res, next) => {
-    const recipeId = parseInt(req.params.id, 10);
+    const recipeId = req.params.id;
     const userId = req.user ? req.user.user_id : null;
 
     const client = await pool.connect();
