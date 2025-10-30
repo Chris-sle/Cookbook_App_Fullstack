@@ -1,4 +1,6 @@
 const createError = require('http-errors');
+const generateUniqueUUIDForTable = require('../middleware/generateUUID');
+
 
 /**
  * Generic DB helpers for name/id entities (ingredients, categories).
@@ -13,12 +15,13 @@ const createError = require('http-errors');
  * Insert recipe and return its id.
  */
 async function insertRecipe(client, { title, instructions, image_url, author_id }) {
+  const recipeId = await generateUniqueUUIDForTable('recipes');
   const res = await client.query(
-    `INSERT INTO recipes (title, instructions, image_url, author_id)
-     VALUES ($1, $2, $3, $4) RETURNING id`,
-    [title, instructions, image_url || null, author_id]
+    `INSERT INTO recipes (id, title, instructions, image_url, author_id)
+     VALUES ($1, $2, $3, $4, $5) RETURNING id`,
+    [recipeId, title, instructions, image_url || null, author_id]
   );
-  return res.rows[0].id;
+  return recipeId;
 }
 
 /**
