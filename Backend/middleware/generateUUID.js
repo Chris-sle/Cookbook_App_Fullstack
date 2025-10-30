@@ -1,26 +1,26 @@
+// middleware/generateUUID.js
 const { uuid } = require('uuidv4');
-const pool = require('../db'); // or correct relative path to your db module
+const pool = require('../db');
 
-function generateUniqueUUIDForTable(tableName) {
-  return async (req, res, next) => {
-    const client = await pool.connect();
-    try {
-      let exists = true;
-      let newId;
-      while (exists) {
-        newId = uuid();
-        console.log('Generated UUID:', newId);
-        const result = await client.query(`SELECT 1 FROM ${tableName} WHERE id = $1`, [newId]);
-        exists = result.rows.length > 0;
+async function generateUniqueUUIDForTable(tableName) {
+  const client = await pool.connect();
+  try {
+    let exists = true;
+    let newId;
+    const MAX_ATTEMPTS = 5;
+    let attempts = 0;
+    while (exists) {
+      if (++attempts > MAX_ATTEMPTS) {
+        throw new Error('Failed to generate unique id after multiple attempts');
       }
-      req.generatedId = newId;
-      next();
-    } catch (err) {
-      next(err);
-    } finally {
-      client.release();
+      newId = uuid();
+      const result = await client.query(`SELECT 1 FROM ${tableName} WHERE id = $1`, [newId]);
+      exists = result.rows.length > 0;
     }
-  };
+    return newId;
+  } finally {
+    client.release();
+  }
 }
 
 module.exports = generateUniqueUUIDForTable;
