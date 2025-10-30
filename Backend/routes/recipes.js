@@ -5,6 +5,8 @@ const router = express.Router();
 const pool = require('../db');
 const authenticateToken = require('../middleware/auth');
 const validationHandler = require('../middleware/validationHandler');
+const generateUniqueUUIDForTable = require('../middleware/generateUUID');
+const validateUUIDFormat = require('../middleware/validateUUID');
 
 const {
   insertRecipe,
@@ -13,7 +15,7 @@ const {
   fetchIdsByNames,
   findSimilarEntityId,
   bulkInsertAssociations
-} = require('../lib/entityHelpers'); // adjust path if you put lib elsewhere
+} = require('../lib/entityHelpers');
 
 // POST /api/recipes
 router.post(
@@ -54,96 +56,157 @@ router.post(
       // create recipe
       const recipeId = await insertRecipe(client, { title, instructions, image_url, author_id });
 
-      // ---- Ingredients ----
-      const ingredientProvidedIds = [];
+      // --------- Ingredients Processing ---------
+      const ingredientIdsToValidate = [];
       const ingredientNamesSet = new Set();
+
       for (const ing of ingredients) {
         if (!ing) continue;
+
         if (ing.ingredient_id != null && ing.ingredient_id !== '') {
-          const idNum = parseInt(ing.ingredient_id, 10);
-          if (Number.isNaN(idNum)) throw createError(400, `Invalid ingredient_id: ${ing.ingredient_id}`);
-          ingredientProvidedIds.push(idNum);
+          // Validate UUID format
+          await validateUUIDFormat(ing.ingredient_id);
+          ingredientIdsToValidate.push(ing.ingredient_id);
         } else {
-          const raw = String(ing.name || '').trim();
-          if (!raw) throw createError(400, 'Ingredient name cannot be empty');
-          ingredientNamesSet.add(raw.toLowerCase());
+          const rawName = String(ing.name || '').trim();
+          if (!rawName) throw createError(400, 'Ingredient name cannot be empty');
+          ingredientNamesSet.add(rawName.toLowerCase());
         }
       }
 
-      if (ingredientProvidedIds.length) await validateProvidedIds(client, 'ingredients', ingredientProvidedIds);
+      // Validate existing ingredient IDs
+      if (ingredientIdsToValidate.length) {
+        await validateProvidedIds(client, 'ingredients', ingredientIdsToValidate);
+      }
 
-      const ingredientNamesToEnsure = Array.from(ingredientNamesSet);
-      if (ingredientNamesToEnsure.length) await ensureNames(client, 'ingredients', ingredientNamesToEnsure);
+      // Ensure all ingredient names are in the DB
+      const ingredientNamesArray = Array.from(ingredientNamesSet);
+      if (ingredientNamesArray.length) {
+        await ensureNames(client, 'ingredients', ingredientNamesArray);
+      }
 
-      const ingredientNameIdMap = await fetchIdsByNames(client, 'ingredients', ingredientNamesToEnsure);
+      // Fetch IDs for all ingredients (existing + new ones will be inserted first if needed)
+      const ingredientNameIdMap = await fetchIdsByNames(client, 'ingredients', ingredientNamesArray);
 
+      // --- Insert new ingredients for names that don't exist yet ---
+      const newIngredientNames = ingredientNamesArray.filter(
+        name => !ingredientNameIdMap[name]
+      );
+
+      // Generate UUIDs and insert new ingredients
+      const newIngredientIdMap = {}; // name -> id
+      for (const name of newIngredientNames) {
+        const newId = await generateUniqueUUIDForTable('ingredients');
+        await client.query(
+          `INSERT INTO ingredients (id, name) VALUES ($1, $2)`,
+          [newId, name]
+        );
+        newIngredientIdMap[name] = newId;
+      }
+
+      // Combine existing and newly created ingredient IDs
+      const finalIngredientIdMap = { ...ingredientNameIdMap, ...newIngredientIdMap };
+
+      // Prepare association rows
       const recipeIngredientRows = [];
       for (const ing of ingredients) {
         if (!ing) continue;
         let ingredientId;
         if (ing.ingredient_id != null && ing.ingredient_id !== '') {
-          ingredientId = parseInt(ing.ingredient_id, 10);
+          // UUID validated earlier
+          ingredientId = ing.ingredient_id;
         } else {
           const normalized = String(ing.name || '').trim().toLowerCase();
-          ingredientId = ingredientNameIdMap[normalized];
+          ingredientId = finalIngredientIdMap[normalized];
         }
-        if (!ingredientId) throw createError(400, `Could not resolve ingredient id for "${ing.name || ing.ingredient_id}"`);
+        if (!ingredientId) throw createError(400, `Cannot resolve ingredient for ${ing.name || ing.ingredient_id}`);
         recipeIngredientRows.push([recipeId, ingredientId, ing.quantity || null]);
       }
 
-      await bulkInsertAssociations(client, 'recipe_ingredients', ['recipe_id', 'ingredient_id', 'quantity'], recipeIngredientRows);
+      // --- Categories Processing (similar approach) ---
 
-      // ---- Categories ----
-      const categoryProvidedIds = [];
+      const categoryIdsToValidate = [];
       const categoryNamesSet = new Set();
+
       for (const c of categories) {
         if (!c) continue;
+
         if (c.category_id != null && c.category_id !== '') {
-          const idNum = parseInt(c.category_id, 10);
-          if (Number.isNaN(idNum)) throw createError(400, `Invalid category_id: ${c.category_id}`);
-          categoryProvidedIds.push(idNum);
+          // validate UUID
+          await validateUUIDFormat(c.category_id);
+          categoryIdsToValidate.push(c.category_id);
         } else {
-          const raw = String(c.name || '').trim();
-          if (!raw) throw createError(400, 'Category name cannot be empty');
-          categoryNamesSet.add(raw.toLowerCase());
+          const rawName = String(c.name || '').trim();
+          if (!rawName) throw createError(400, 'Category name cannot be empty');
+          categoryNamesSet.add(rawName.toLowerCase());
         }
       }
 
-      if (categoryProvidedIds.length) await validateProvidedIds(client, 'categories', categoryProvidedIds);
-
-      const categoryNamesToEnsure = Array.from(categoryNamesSet);
-      if (categoryNamesToEnsure.length) await ensureNames(client, 'categories', categoryNamesToEnsure);
-
-      let categoryNameIdMap = await fetchIdsByNames(client, 'categories', categoryNamesToEnsure);
-
-      // try fuzzy for unresolved
-      for (const name of categoryNamesToEnsure) {
-        if (!categoryNameIdMap[name]) {
-          const simId = await findSimilarEntityId(client, 'categories', name);
-          if (simId) categoryNameIdMap[name] = simId;
-        }
+      // Validate existing category IDs
+      if (categoryIdsToValidate.length) {
+        await validateProvidedIds(client, 'categories', categoryIdsToValidate);
       }
 
+      // Ensure category names exist
+      const categoryNamesArray = Array.from(categoryNamesSet);
+      if (categoryNamesArray.length) {
+        await ensureNames(client, 'categories', categoryNamesArray);
+      }
+
+      // Fetch IDs for categories
+      const categoryNameIdMap = await fetchIdsByNames(client, 'categories', categoryNamesArray);
+
+      // Insert new categories for names that don't exist
+      const newCategoryNames = categoryNamesArray.filter(name => !categoryNameIdMap[name]);
+      const newCategoryIdMap = {};
+      for (const name of newCategoryNames) {
+        const newId = await generateUniqueUUIDForTable('categories');
+        await client.query(
+          `INSERT INTO categories (id, name) VALUES ($1, $2)`,
+          [newId, name]
+        );
+        newCategoryIdMap[name] = newId;
+      }
+
+      // Combine all category IDs
+      const finalCategoryIdMap = { ...categoryNameIdMap, ...newCategoryIdMap };
+
+      // Prepare category association rows
       const recipeCategoryRows = [];
       for (const c of categories) {
         if (!c) continue;
         let categoryId;
         if (c.category_id != null && c.category_id !== '') {
-          categoryId = parseInt(c.category_id, 10);
+          // UUID validated earlier
+          categoryId = c.category_id;
         } else {
           const normalized = String(c.name || '').trim().toLowerCase();
-          categoryId = categoryNameIdMap[normalized];
+          categoryId = finalCategoryIdMap[normalized];
         }
-        if (!categoryId) throw createError(400, `Could not resolve category id for "${c.name || c.category_id}"`);
+        if (!categoryId) throw createError(400, `Cannot resolve category for ${c.name || c.category_id}`);
         recipeCategoryRows.push([recipeId, categoryId]);
       }
 
-      await bulkInsertAssociations(client, 'recipe_categories', ['recipe_id', 'category_id'], recipeCategoryRows);
+      // ----------------------------------------------
+      // Insert associations
+      await bulkInsertAssociations(
+        client,
+        'recipe_ingredients',
+        ['recipe_id', 'ingredient_id', 'quantity'],
+        recipeIngredientRows
+      );
+
+      await bulkInsertAssociations(
+        client,
+        'recipe_categories',
+        ['recipe_id', 'category_id'],
+        recipeCategoryRows
+      );
 
       await client.query('COMMIT');
       return res.status(201).json({ message: 'Recipe created', recipe_id: recipeId });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await client.query('ROLLBACK').catch(() => { });
       next(err);
     } finally {
       client.release();
