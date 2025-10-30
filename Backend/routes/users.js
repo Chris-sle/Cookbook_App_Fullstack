@@ -6,7 +6,6 @@ const { body } = require('express-validator');
 const validationHandler = require('../middleware/validationHandler');
 const authenticateToken = require('../middleware/auth');
 const generateUniqueUUIDForTable = require('../middleware/generateUUID');
-const generateUserId = generateUniqueUUIDForTable('users');
 
 
 // POST /users/register
@@ -18,10 +17,9 @@ router.post(
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
     validationHandler
   ],
-  generateUserId,
   async (req, res) => {
     const { username, email, password } = req.body;
-    const id = req.generatedId;
+    const id = await generateUniqueUUIDForTable('users');
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
       const newUser = await pool.query(
@@ -50,23 +48,21 @@ router.put(
     const { id } = req.params;
     const { email, password } = req.body;
 
-text
+    try {
+      if (email) {
+        await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, id]);
+      }
 
-try {
-  if (email) {
-    await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, id]);
-  }
+      if (password) {
+        const hashedPassword = await bcrypt.hash(password, 10);
+        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, id]);
+      }
 
-  if (password) {
-    const hashedPassword = await bcrypt.hash(password, 10);
-    await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, id]);
-  }
-
-  res.json({ message: 'User updated' });
-} catch (err) {
-  console.error('Update user error:', err);
-  res.status(500).json({ message: 'Server error' });
-}
+      res.json({ message: 'User updated' });
+    } catch (err) {
+      console.error('Update user error:', err);
+      res.status(500).json({ message: 'Server error' });
+    }
   }
 );
 
