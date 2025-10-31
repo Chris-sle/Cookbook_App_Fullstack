@@ -50,7 +50,7 @@ onMounted(() => {
 })
 
 
-const { recipeId } = defineProps({ recipeId: { type: Number, required: true } })
+const { recipeId } = defineProps({ recipeId: { required: true } })
 
 const upvotes = ref(0)
 const downvotes = ref(0)
