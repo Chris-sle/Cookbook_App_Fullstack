@@ -8,6 +8,7 @@ const authenticateToken = require('../middleware/auth');
 const validationHandler = require('../middleware/validationHandler');
 const generateUniqueUUIDForTable = require('../middleware/generateUUID');
 const validateUUIDFormat = require('../middleware/validateUUID');
+const { validate: validateUUID } = require('uuid');
 
 /**
  * POST /recipes/:id/click
@@ -17,7 +18,12 @@ const validateUUIDFormat = require('../middleware/validateUUID');
 router.post(
   '/:id/click',
   [
-    validateUUIDFormat,
+    param('id').custom((id) => {
+      if (!id || typeof id !== 'string' || !validateUUID(id)) {
+        throw createError(400, 'Invalid UUID');
+      }
+      return true;
+    }),
     validationHandler
   ],
   async (req, res, next) => {
@@ -57,7 +63,7 @@ router.post(
       await client.query('COMMIT');
       return res.json({ message: 'click recorded', clicks });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await client.query('ROLLBACK').catch(() => { });
       next(err);
     } finally {
       client.release();
@@ -118,12 +124,23 @@ router.post(
   '/:id/vote',
   authenticateToken,
   [
-    param('id').isInt().withMessage('id must be an integer'),
+    param('id').custom((id) => {
+      if (!id || typeof id !== 'string' || !validateUUID(id)) {
+        throw createError(400, 'Invalid UUID');
+      }
+      return true;
+    }),
+    // optional: add a console log to see what `id` value is received
+    (req, res, next) => {
+      console.log('Received id:', req.params.id);
+      console.log('Is valid UUID:', validateUUID(req.params.id));
+      next();
+    },
     body('vote').isInt().custom(v => [1, -1, 0].includes(v)).withMessage('vote must be 1, -1 or 0'),
     validationHandler
   ],
   async (req, res, next) => {
-    const recipeId = parseInt(req.params.id, 10);
+    const recipeId = req.params.id;
     const userId = req.user.user_id;
     const vote = parseInt(req.body.vote, 10); // 1, -1, or 0
 
@@ -203,7 +220,7 @@ router.post(
         score: state.score
       });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await client.query('ROLLBACK').catch(() => { });
       next(err);
     } finally {
       client.release();
@@ -216,7 +233,7 @@ router.post(
  * Returns aggregates and (if authenticated) the current user's vote
  */
 router.get('/:id/vote', async (req, res, next) => {
-  const recipeId = parseInt(req.params.id, 10);
+  const recipeId = req.params.id;
   let userId = null;
 
   // Check if token is in headers
@@ -297,7 +314,7 @@ router.delete(
         score: state.score
       });
     } catch (err) {
-      await client.query('ROLLBACK').catch(() => {});
+      await client.query('ROLLBACK').catch(() => { });
       next(err);
     } finally {
       client.release();
