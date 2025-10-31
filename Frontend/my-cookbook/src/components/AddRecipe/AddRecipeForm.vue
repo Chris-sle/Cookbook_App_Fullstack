@@ -352,7 +352,7 @@ async function submit() {
     image_url: image_url.value && image_url.value.trim() ? image_url.value.trim() : null,
     ingredients: ingredients.map((ing) => {
       if (ing.ingredient_id) {
-        return { ingredient_id: Number(ing.ingredient_id), quantity: ing.quantity || null }
+        return { ingredient_id: ing.ingredient_id, quantity: ing.quantity || null }
       }
       return { name: (ing.name || '').trim(), quantity: ing.quantity || null }
     }),
@@ -360,7 +360,7 @@ async function submit() {
 
   if (categoriesList.length) {
     payload.categories = categoriesList.map((cat) => {
-      if (cat.category_id) return { category_id: Number(cat.category_id) }
+      if (cat.category_id) return { category_id: cat.category_id }
       return { name: (cat.name || '').trim() }
     })
   }
