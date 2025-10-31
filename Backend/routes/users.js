@@ -3,6 +3,7 @@ const router = express.Router();
 const pool = require('../db');
 const bcrypt = require('bcrypt');
 const { body } = require('express-validator');
+const sendMail = require('../services/mail');
 const validationHandler = require('../middleware/validationHandler');
 const authenticateToken = require('../middleware/auth');
 const generateUniqueUUIDForTable = require('../middleware/generateUUID');
