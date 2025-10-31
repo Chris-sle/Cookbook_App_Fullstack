@@ -53,7 +53,7 @@ const route = useRoute()
 const { id } = route.params
 
 const recipesStore = useRecipesStore()
-const recipe = computed(() => recipesStore.getRecipeById(Number(id)))
+const recipe = computed(() => recipesStore.getRecipeById(id))
 console.log('Loaded recipe:', recipe.value)
 
 const placeholderImage = 'https://via.placeholder.com/300x200?text=No+Image'
