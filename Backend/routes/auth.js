@@ -7,6 +7,7 @@ const jwt = require('jsonwebtoken');
 const { body, param } = require('express-validator');
 const validationHandler = require('../middleware/validationHandler');
 
+
 // Helper function to create a secure random refresh token
 function createRefreshToken() {
   return crypto.randomBytes(64).toString('hex');
@@ -125,6 +126,41 @@ router.post('/refresh', async (req, res, next) => {
 
     res.json({ accessToken });
   } catch (err) {
+    next(err);
+  } finally {
+    client.release();
+  }
+});
+
+// GET /auth/confirm?token=...
+router.get('/confirm', async (req, res, next) => {
+  const token = String(req.query.token || '').trim();
+  if (!token) return res.status(400).send('Missing token');
+
+  const client = await pool.connect();
+  try {
+    await client.query('BEGIN');
+    const r = await client.query(
+      `SELECT user_id, expires_at FROM user_confirmations WHERE token = $1`,
+      [token]
+    );
+    if (r.rows.length === 0) {
+      await client.query('ROLLBACK');
+      return res.status(400).send('Invalid confirmation token');
+    }
+    const row = r.rows[0];
+    if (new Date(row.expires_at) < new Date()) {
+      await client.query('DELETE FROM user_confirmations WHERE token = $1', [token]);
+      await client.query('COMMIT');
+      return res.status(400).send('Confirmation token expired');
+    }
+
+    await client.query('UPDATE users SET is_confirmed = true WHERE id = $1', [row.user_id]);
+    await client.query('DELETE FROM user_confirmations WHERE token = $1', [token]);
+    await client.query('COMMIT');
+    return res.send('Account confirmed. You may now log in.');
+  } catch (err) {
+    await client.query('ROLLBACK').catch(()=>{});
     next(err);
   } finally {
     client.release();
