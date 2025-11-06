@@ -82,14 +82,15 @@ DROP TABLE IF EXISTS users;
 
 -- Create users
 CREATE TABLE users (
-  id SERIAL PRIMARY KEY,
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   username VARCHAR(150) UNIQUE NOT NULL,
   email VARCHAR(150) UNIQUE NOT NULL,
   password VARCHAR(150) NOT NULL,
   is_admin BOOLEAN DEFAULT FALSE,
   status VARCHAR(20) DEFAULT 'active', -- active, banned, etc.
-  suspended_until TIMESTAMP NULL,
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+  is_confirmed BOOLEAN NOT NULL DEFAULT FALSE,
+  suspended_until TIMESTAMPTZ NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 
 -- Create refresh_tokens (used for refreshing tokens)
@@ -100,6 +101,15 @@ CREATE TABLE refresh_tokens (
   user_agent TEXT,
   ip TEXT,
   created_at TIMESTAMPTZ DEFAULT now(),
+  expires_at TIMESTAMPTZ NOT NULL
+);
+
+-- Create user_confirmations (user for email vertification)
+CREATE TABLE IF NOT EXISTS user_confirmations (
+  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+  token TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
   expires_at TIMESTAMPTZ NOT NULL
 );
 
