@@ -3,10 +3,10 @@ const router = express.Router();
 const pool = require('../db');
 const bcrypt = require('bcrypt');
 const { body } = require('express-validator');
-const sendMail = require('../services/mail');
 const validationHandler = require('../middleware/validationHandler');
 const authenticateToken = require('../middleware/auth');
 const generateUniqueUUIDForTable = require('../middleware/generateUUID');
+const createAndSendConfirmation = require('../lib/emailHelpers');
 
 
 // POST /users/register
@@ -23,11 +23,33 @@ router.post(
     const id = await generateUniqueUUIDForTable('users');
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
-      const newUser = await pool.query(
-        'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING id',
-        [id, username, email, hashedPassword]
-      );
-      res.json({ message: 'User registered', user_id: newUser.rows[0].id });
+
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // insert user
+        const newUserRes = await client.query(
+          'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING id, email',
+          [id, username, email, hashedPassword]
+        );
+        
+        const userId = newUserRes.rows[0].id;
+        const userEmail = newUserRes.rows[0].email;
+
+        // create confirmation token and send email
+        const createAndSendConfirmation = require('../lib/emailHelpers');
+        await createAndSendConfirmation(client, userId, userEmail);
+
+        await client.query('COMMIT');
+
+        return res.json({ message: 'User registered', user_id: userId });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => { });
+        throw err;
+      } finally {
+        client.release();
+      }
     } catch (err) {
       console.error('Register error:', err);
       res.status(500).json({ message: 'Server error' });
