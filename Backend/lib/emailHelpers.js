@@ -21,4 +21,45 @@ async function createAndSendConfirmation(client, userId, userEmail) {
   return token;
 }
 
-module.exports = createAndSendConfirmation;
+/**
+ * Send a suspension notice email.
+ * @param {string} to - recipient email
+ * @param {string} username - user name for personalization
+ * @param {string} duration - suspension duration (e.g., '7 days')
+ */
+async function sendSuspensionEmail(to, username, duration) {
+  const html = `
+    <p>Dear ${username},</p>
+    <p>Your account has been suspended for ${duration}.</p>
+    <p>If you think this is a mistake, contact support.</p>
+    <p>Regards,<br/>Team</p>
+  `;
+  await sendMail({ to, subject: 'Account Suspension Notice', html });
+}
+
+/**
+ * Send a ban notification email.
+ * @param {string} to - recipient email
+ * @param {string} username - user name
+ */
+async function sendBanEmail(to, username) {
+  const html = `
+    <p>Dear ${username},</p>
+    <p>Your account has been permanently banned.</p>
+    <p>If you believe this is an error, contact support.</p>
+    <p>Regards,<br/>Team</p>
+  `;
+  await sendMail({ to, subject: 'Account Ban Notice', html });
+}
+
+/**
+ * Send a newsletter email.
+ * @param {string} to - recipient email
+ * @param {string} subject - email subject
+ * @param {string} content - email HTML content
+ */
+async function sendNewsletter(to, subject, content) {
+  await sendMail({ to, subject, html: content });
+}
+
+module.exports = { createAndSendConfirmation, sendSuspensionEmail, sendBanEmail, sendNewsletter };
