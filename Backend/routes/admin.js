@@ -5,6 +5,7 @@ const authenticateToken = require('../middleware/auth');
 const authorizeAdmin = require('../middleware/admin');
 const { param, body, query } = require('express-validator');
 const validationHandler = require('../middleware/validationHandler');
+const emailHelpers = require('../lib/emailHelpers');
 
 /** LIST USERS with pagination */
 router.get(
@@ -48,7 +49,7 @@ router.delete(
   authenticateToken,
   authorizeAdmin,
   [
-    param('id').isInt().withMessage('User id must be an integer'),
+    param('id').isUUID().withMessage('id must be a UUID'),
     validationHandler
   ],
   async (req, res, next) => {
@@ -72,16 +73,38 @@ router.post(
   authenticateToken,
   authorizeAdmin,
   [
-    param('id').isInt(),
+    param('id').isUUID().withMessage('id must be a UUID'),
     validationHandler
   ],
   async (req, res, next) => {
-    const targetId = parseInt(req.params.id, 10);
+    const targetId = req.params.id;
+    const client = await pool.connect();
     try {
-      await pool.query('UPDATE users SET status=$1 WHERE id=$2', ['banned', targetId]);
+      await client.query('BEGIN');
+
+      // update status
+      await client.query('UPDATE users SET status = $1 WHERE id = $2', ['banned', targetId]);
+
+      // fetch email & username to notify
+      const u = await client.query('SELECT username, email FROM users WHERE id = $1', [targetId]);
+      if (u.rows.length) {
+        const { username, email } = u.rows[0];
+        // send ban email (do not block response if mail fails; log error)
+        try {
+          const { sendBanEmail } = require('../lib/emailHelpers');
+          await sendBanEmail(email, username);
+        } catch (mailErr) {
+          console.error('Failed to send ban email:', mailErr);
+        }
+      }
+
+      await client.query('COMMIT');
       res.json({ message: 'User banned' });
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
       next(err);
+    } finally {
+      client.release();
     }
   }
 );
@@ -92,24 +115,41 @@ router.post(
   authenticateToken,
   authorizeAdmin,
   [
-    param('id').isInt(),
-    body('duration').optional().isInt({ min:1 }),
+    param('id').isUUID().withMessage('id must be a UUID'),
+    body('duration').optional().isInt({ min: 1 }),
     validationHandler
   ],
   async (req, res, next) => {
-    const targetId = parseInt(req.params.id, 10);
+    const targetId = req.params.id;
     const { duration } = req.body;
+    const client = await pool.connect();
     try {
+      await client.query('BEGIN');
+
       const suspendUntil = new Date();
-      if (duration) {
-        suspendUntil.setDate(suspendUntil.getDate() + duration);
-      } else {
-        suspendUntil.setDate(suspendUntil.getDate() + 1); // default 1 day
+      suspendUntil.setDate(suspendUntil.getDate() + (duration ? Number(duration) : 1));
+
+      await client.query('UPDATE users SET suspended_until = $1 WHERE id = $2', [suspendUntil, targetId]);
+
+      // fetch email & username to notify
+      const u = await client.query('SELECT username, email FROM users WHERE id = $1', [targetId]);
+      if (u.rows.length) {
+        const { username, email } = u.rows[0];
+        try {
+          const { sendSuspensionEmail } = require('../lib/emailHelpers');
+          await sendSuspensionEmail(email, username, `${Math.ceil((suspendUntil - new Date())/(24*3600*1000))} days`);
+        } catch (mailErr) {
+          console.error('Failed to send suspension email:', mailErr);
+        }
       }
-      await pool.query('UPDATE users SET suspended_until=$1 WHERE id=$2', [suspendUntil, targetId]);
-      res.json({ message: `User suspended until ${suspendUntil}` });
+
+      await client.query('COMMIT');
+      res.json({ message: `User suspended until ${suspendUntil.toISOString()}` });
     } catch (err) {
+      await client.query('ROLLBACK').catch(() => {});
       next(err);
+    } finally {
+      client.release();
     }
   }
 );
@@ -139,7 +179,7 @@ router.post('/promote/:id',
   authenticateToken, 
   authorizeAdmin,
   [
-    param('id').isInt().withMessage('User ID must be an integer'),
+    param('id').isUUID().withMessage('id must be a UUID'),
     validationHandler
   ],
   async (req, res, next) => {
@@ -156,5 +196,41 @@ router.post('/promote/:id',
     }
   }
 );
+
+// 4) Admin: list recipes with no author (orphaned recipes)
+router.get('/admin/orphaned-recipes', authenticateToken, authorizeAdmin, async (req, res) => {
+  try {
+    const results = await pool.query(
+      `SELECT r.* FROM recipes r
+       LEFT JOIN users u ON r.author_id = u.id
+       WHERE r.author_id IS NULL OR u.id IS NULL`
+    );
+    res.json(results.rows);
+  } catch (err) {
+    console.error('Orphaned recipes error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
+
+// 5) Admin: reassign recipe author
+router.post('/admin/recipes/:id/assign-author', authenticateToken, authorizeAdmin, [
+  param('id').isUUID().withMessage('recipe id must be UUID'),
+  body('author_id').isUUID().withMessage('author_id must be UUID'),
+  validationHandler
+], async (req, res) => {
+  const recipeId = req.params.id;
+  const { author_id } = req.body;
+  try {
+    // ensure target user exists
+    const u = await pool.query('SELECT id FROM users WHERE id = $1', [author_id]);
+    if (!u.rows.length) return res.status(404).json({ message: 'Target user not found' });
+
+    await pool.query('UPDATE recipes SET author_id = $1 WHERE id = $2', [author_id, recipeId]);
+    res.json({ message: 'Recipe author updated' });
+  } catch (err) {
+    console.error('Assign author error:', err);
+    res.status(500).json({ message: 'Server error' });
+  }
+});
 
 module.exports = router;
