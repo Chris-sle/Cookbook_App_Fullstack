@@ -18,10 +18,26 @@ router.post(
     body('email').isEmail().withMessage('A valid email is required'),
     body('password').isLength({ min: 6 }).withMessage('Password must be at least 6 characters long'),
     validationHandler,
-    
+
   ],
   async (req, res) => {
     const { username, email, password } = req.body;
+
+    // Check if username or email already exists
+    const existingUsers = await pool.query(
+      'SELECT id, username, email FROM users WHERE username = $1 OR email = $2',
+      [username, email]
+    );
+    if (existingUsers.rows.length) {
+      const existing = existingUsers.rows[0];
+      if (existing.username === username) {
+        return res.status(409).json({ message: 'Username already taken' });
+      }
+      if (existing.email === email) {
+        return res.status(409).json({ message: 'Email already registered' });
+      }
+    }
+
     const id = await generateUniqueUUIDForTable('users');
     try {
       const hashedPassword = await bcrypt.hash(password, 10);
@@ -35,7 +51,7 @@ router.post(
           'INSERT INTO users (id, username, email, password) VALUES ($1, $2, $3, $4) RETURNING id, email',
           [id, username, email, hashedPassword]
         );
-        
+
         const userId = newUserRes.rows[0].id;
         const userEmail = newUserRes.rows[0].email;
 
@@ -64,22 +80,43 @@ router.put(
   '/:id',
   [
     body('email').isEmail().optional().withMessage('A valid email is required'),
-    body('password').isLength({ min: 6 }).optional().withMessage('Password must be at least 6 characters long'),
+    body('username').isString().optional().isLength({ min: 1 }).withMessage('Username must be non-empty'),
     validationHandler,
     authenticateToken
   ],
   async (req, res) => {
     const { id } = req.params;
-    const { email, password } = req.body;
+    const { email, username } = req.body;
+    const requesterId = req.user && req.user.user_id;
+
+    if (requesterId !== id) {
+      return res.status(403).json({ message: 'Forbidden' });
+    }
 
     try {
-      if (email) {
-        await pool.query('UPDATE users SET email = $1 WHERE id = $2', [email, id]);
+      // If username change requested, ensure not taken
+      if (username) {
+        const u = await pool.query('SELECT id FROM users WHERE username = $1', [username]);
+        if (u.rows.length && u.rows[0].id !== id) {
+          return res.status(409).json({ message: 'Username already taken' });
+        }
+        await pool.query('UPDATE users SET username = $1 WHERE id = $2', [username, id]);
       }
 
-      if (password) {
-        const hashedPassword = await bcrypt.hash(password, 10);
-        await pool.query('UPDATE users SET password = $1 WHERE id = $2', [hashedPassword, id]);
+      // If email change requested, generate a confirmation token and send email
+      if (email) {
+        const client = await pool.connect();
+        try {
+          await client.query('BEGIN');
+          // Generate token, store, and send email
+          await createAndSendConfirmation(client, id, email);
+          await client.query('COMMIT');
+        } catch (err) {
+          await client.query('ROLLBACK').catch(() => {});
+          throw err;
+        } finally {
+          client.release();
+        }
       }
 
       res.json({ message: 'User updated' });
