@@ -214,6 +214,235 @@ router.post(
   }
 );
 
+// PUT /api/recipes/:id
+router.put(
+  '/:id',
+  authenticateToken,
+  [
+    param('id').isUUID().withMessage('id must be a UUID'),
+    body('title').optional().isString(),
+    body('instructions').optional().isString(),
+    body('image_url').optional().isURL(),
+    body('ingredients').optional().isArray(),
+    body('ingredients.*').custom((val) => {
+      if (!val) return true;
+      if ((!val.name || !String(val.name).trim()) && !val.ingredient_id) {
+        throw new Error('Each ingredient must include a name or ingredient_id');
+      }
+      return true;
+    }),
+    body('categories').optional().isArray(),
+    body('categories.*').custom((val) => {
+      if (!val) return true;
+      if ((!val.name || !String(val.name).trim()) && !val.category_id) {
+        throw new Error('Each category must include a name or category_id');
+      }
+      return true;
+    }),
+    validationHandler
+  ],
+  async (req, res, next) => {
+    const recipeId = req.params.id;
+    const { title, instructions, image_url, ingredients = null, categories = null } = req.body;
+    const userId = req.user && req.user.user_id;
+    const isAdmin = req.user && req.user.is_admin;
+
+    const client = await pool.connect();
+    try {
+      await client.query('BEGIN');
+
+      // ensure recipe exists and permission
+      const r = await client.query('SELECT author_id FROM recipes WHERE id = $1', [recipeId]);
+      if (r.rows.length === 0) {
+        await client.query('ROLLBACK');
+        return res.status(404).json({ message: 'Recipe not found' });
+      }
+      const authorId = r.rows[0].author_id;
+      if (!isAdmin && authorId !== userId) {
+        await client.query('ROLLBACK');
+        return res.status(403).json({ message: 'Forbidden' });
+      }
+
+      // Update recipe fields if provided
+      const updateFields = [];
+      const updateParams = [];
+      let idx = 1;
+      if (title !== undefined) { updateFields.push(`title = $${idx++}`); updateParams.push(title); }
+      if (instructions !== undefined) { updateFields.push(`instructions = $${idx++}`); updateParams.push(instructions); }
+      if (image_url !== undefined) { updateFields.push(`image_url = $${idx++}`); updateParams.push(image_url); }
+
+      if (updateFields.length) {
+        updateParams.push(recipeId);
+        await client.query(
+          `UPDATE recipes SET ${updateFields.join(', ')} WHERE id = $${updateParams.length}`,
+          updateParams
+        );
+      }
+
+      // ------ Ingredients handling ------
+      if (ingredients) {
+        // gather provided ids and names
+        const providedIngredientIds = [];
+        const ingredientNamesSet = new Set();
+        for (const ing of ingredients) {
+          if (!ing) continue;
+          if (ing.ingredient_id != null && String(ing.ingredient_id).trim() !== '') {
+            providedIngredientIds.push(String(ing.ingredient_id).trim());
+          } else {
+            const raw = String(ing.name || '').trim();
+            if (!raw) throw createError(400, 'Ingredient name cannot be empty');
+            ingredientNamesSet.add(raw.toLowerCase());
+          }
+        }
+
+        // validate provided ids exist
+        if (providedIngredientIds.length) {
+          await validateProvidedIds(client, 'ingredients', providedIngredientIds);
+        }
+
+        // ensure names exist and fetch ids
+        const ingredientNamesToEnsure = Array.from(ingredientNamesSet);
+        if (ingredientNamesToEnsure.length) await ensureNames(client, 'ingredients', ingredientNamesToEnsure);
+        const ingredientNameIdMap = await fetchIdsByNames(client, 'ingredients', ingredientNamesToEnsure);
+
+        // try fuzzy match for unresolved names
+        for (const name of ingredientNamesToEnsure) {
+          if (!ingredientNameIdMap[name]) {
+            const simId = await findSimilarEntityId(client, 'ingredients', name);
+            if (simId) ingredientNameIdMap[name] = simId;
+          }
+        }
+
+        // build associations [recipe_id, ingredient_id, quantity]
+        const recipeIngredientRows = [];
+        for (const ing of ingredients) {
+          if (!ing) continue;
+          let ingredientId;
+          if (ing.ingredient_id != null && String(ing.ingredient_id).trim() !== '') {
+            ingredientId = String(ing.ingredient_id).trim();
+          } else {
+            const normalized = String(ing.name || '').trim().toLowerCase();
+            ingredientId = ingredientNameIdMap[normalized];
+          }
+          if (!ingredientId) throw createError(400, `Could not resolve ingredient id for "${ing.name || ing.ingredient_id}"`);
+          recipeIngredientRows.push([recipeId, ingredientId, ing.quantity || null]);
+        }
+
+        // replace associations
+        await client.query('DELETE FROM recipe_ingredients WHERE recipe_id = $1', [recipeId]);
+        if (recipeIngredientRows.length) {
+          await bulkInsertAssociations(client, 'recipe_ingredients', ['recipe_id', 'ingredient_id', 'quantity'], recipeIngredientRows);
+        }
+      }
+
+      // ------ Categories handling ------
+      if (categories) {
+        const providedCategoryIds = [];
+        const categoryNamesSet = new Set();
+        for (const c of categories) {
+          if (!c) continue;
+          if (c.category_id != null && String(c.category_id).trim() !== '') {
+            providedCategoryIds.push(String(c.category_id).trim());
+          } else {
+            const raw = String(c.name || '').trim();
+            if (!raw) throw createError(400, 'Category name cannot be empty');
+            categoryNamesSet.add(raw.toLowerCase());
+          }
+        }
+
+        if (providedCategoryIds.length) await validateProvidedIds(client, 'categories', providedCategoryIds);
+
+        const categoryNamesToEnsure = Array.from(categoryNamesSet);
+        if (categoryNamesToEnsure.length) await ensureNames(client, 'categories', categoryNamesToEnsure);
+        let categoryNameIdMap = await fetchIdsByNames(client, 'categories', categoryNamesToEnsure);
+
+        for (const name of categoryNamesToEnsure) {
+          if (!categoryNameIdMap[name]) {
+            const simId = await findSimilarEntityId(client, 'categories', name);
+            if (simId) categoryNameIdMap[name] = simId;
+          }
+        }
+
+        const recipeCategoryRows = [];
+        for (const c of categories) {
+          if (!c) continue;
+          let categoryId;
+          if (c.category_id != null && String(c.category_id).trim() !== '') {
+            categoryId = String(c.category_id).trim();
+          } else {
+            const normalized = String(c.name || '').trim().toLowerCase();
+            categoryId = categoryNameIdMap[normalized];
+          }
+          if (!categoryId) throw createError(400, `Could not resolve category id for "${c.name || c.category_id}"`);
+          recipeCategoryRows.push([recipeId, categoryId]);
+        }
+
+        await client.query('DELETE FROM recipe_categories WHERE recipe_id = $1', [recipeId]);
+        if (recipeCategoryRows.length) {
+          await bulkInsertAssociations(client, 'recipe_categories', ['recipe_id', 'category_id'], recipeCategoryRows);
+        }
+      }
+
+      await client.query('COMMIT');
+      return res.json({ message: 'Recipe updated', recipe_id: recipeId });
+    } catch (err) {
+      await client.query('ROLLBACK').catch(() => { });
+      next(err);
+    } finally {
+      client.release();
+    }
+  }
+);
+
+// DELETE /api/recipes/:id
+router.delete(
+  '/:id',
+  authenticateToken,
+  [
+    param('id').isUUID().withMessage('Recipe ID must be a UUID'),
+    validationHandler
+  ],
+  async (req, res, next) => {
+    const { id } = req.params;
+    const requesterId = req.user && req.user.user_id;
+    const isAdmin = req.user && req.user.is_admin;
+
+    try {
+      const client = await pool.connect();
+      try {
+        await client.query('BEGIN');
+
+        // Check if recipe exists and permission
+        const r = await client.query('SELECT author_id FROM recipes WHERE id = $1', [id]);
+        if (r.rows.length === 0) {
+          await client.query('ROLLBACK');
+          return res.status(404).json({ message: 'Recipe not found' });
+        }
+
+        const authorId = r.rows[0].author_id;
+        if (!isAdmin && authorId !== requesterId) {
+          await client.query('ROLLBACK');
+          return res.status(403).json({ message: 'Forbidden' });
+        }
+
+        // Delete the recipe (assuming foreign keys with ON DELETE CASCADE)
+        await client.query('DELETE FROM recipes WHERE id = $1', [id]);
+
+        await client.query('COMMIT');
+        res.json({ message: 'Recipe deleted', recipe_id: id });
+      } catch (err) {
+        await client.query('ROLLBACK').catch(() => {});
+        next(err);
+      } finally {
+        client.release();
+      }
+    } catch (err) {
+      console.error('Delete recipe error:', err);
+      res.status(500).json({ message: 'Server error' });
+    }
+  }
+);
+
 // GET /api/recipes/search?ingredient_id=1,2&category_id=3&q=soup&page=1&limit=20
 router.get(
   '/search',
