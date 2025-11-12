@@ -1,6 +1,6 @@
 <template>
     <div class="recipe-details">
-        <div v-if="!recipe" class="loading">Loading recipe…</div>
+        <div v-if="!recipe">Loading recipe…</div>
         <div v-else>
             <div class="header">
                 <h1>{{ recipe.title }}</h1>
@@ -9,51 +9,63 @@
                     <div class="categories">
                         <span v-for="c in recipe.categories || []" :key="c.id" class="category">{{ c.name }}</span>
                     </div>
-
                 </div>
             </div>
-        
-            <!-- Main content: image + ingredients side-by-side -->
+
             <div class="top-row">
                 <div class="image-section">
                     <img :src="recipe.image_url || placeholderImage" :alt="recipe.title" class="recipe-image" />
                 </div>
 
-                <div class="ingredients-section">
-                    <h3>Ingredients</h3>
-                    <ul>
-                        <li v-for="ing in recipe.ingredients || []" :key="ing.id">
-                            {{ ing.name }}<span v-if="ing.quantity"> — {{ ing.quantity }}</span>
-                        </li>
-                    </ul>
+                <div class="vote-section">
+                    <UpDownVoteButtons :recipeId="recipe.id" />
+                </div>
+                <div v-if="isAuthorOrAdmin" class="action-box">
+                    <RecipeActionsBox :recipeId="recipe.id" :recipeTitle="recipe.title" />
                 </div>
             </div>
 
-            <!-- Instructions below -->
+            <section class="ingredients">
+                <h3>Ingredients</h3>
+                <ul>
+                    <li v-for="ing in recipe.ingredients || []" :key="ing.id">
+                        {{ ing.name }}<span v-if="ing.quantity"> — {{ ing.quantity }}</span>
+                    </li>
+                </ul>
+            </section>
+
             <section class="instructions">
                 <h3>Instructions</h3>
                 <p v-if="recipe.instructions">{{ recipe.instructions }}</p>
                 <p v-else class="muted">No instructions provided.</p>
             </section>
-            <div class="vote-section">
-                <UpDownVoteButtons :recipeId="recipe.id" />
-            </div>
         </div>
     </div>
 </template>
 
 <script setup>
-import { onMounted, ref, computed } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRecipesStore } from '../stores/recipes'
 import { useRoute } from 'vue-router'
+import { useAuthStore } from '../stores/auth'
 import UpDownVoteButtons from '../components/UpDownVoteButtons.vue'
+import RecipeActionsBox from '../components/RecipeActionsBox.vue'
 import api from '../services/api'
 
 const route = useRoute()
 const { id } = route.params
 
 const recipesStore = useRecipesStore()
+const auth = useAuthStore()
+
 const recipe = computed(() => recipesStore.getRecipeById(id))
+const isAuthorOrAdmin = computed(() => {
+    if (!recipe.value) return false
+    return (
+        auth.userId === recipe.value.author_id || auth.isAdmin
+    )
+})
+
 console.log('Loaded recipe:', recipe.value)
 
 const placeholderImage = 'https://via.placeholder.com/300x200?text=No+Image'
