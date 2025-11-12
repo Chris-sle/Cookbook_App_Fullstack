@@ -15,10 +15,8 @@ export const useRecipesStore = defineStore('recipes', {
   },
 
   actions: {
-    async fetchRecipes({ force = false } = {}) {
-      if (!force && this.recipes.length > 0) {
-        return this.recipes
-      }
+    async fetchRecipes() {
+      
       console.log('Fetching recipes...');
       this.loading = true
       this.error = null
