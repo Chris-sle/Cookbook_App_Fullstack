@@ -40,7 +40,6 @@
               @select="item => selectIngredientSuggestion(idx, item)" />
           </div>
 
-          <input v-model="ing.ingredient_id" placeholder="(optional) id" />
           <input v-model="ing.quantity" placeholder="Quantity" />
           <button type="button" @click="removeIngredientRow(idx)">Remove</button>
         </div>
@@ -317,8 +316,10 @@ async function submit() {
     const payload = buildPayload()
     const res = await api.put(`/recipes/${id}`, payload)
     success.value = res.data?.message || 'Recipe updated'
-    recipesStore.clearCache()
-    router.push({ name: 'RecipeDetails', params: { id } })
+    // refresh store so details/list reflect changes
+    await recipesStore.fetchRecipes()
+    // redirect to details page
+    router.push(`/recipes/${id}`)
   } catch (err) {
     console.error('Update failed', err)
     serverError.value = err.response?.data?.message || err.message || 'Update failed'
@@ -332,67 +333,152 @@ onMounted(loadInitial)
 
 <style scoped>
 .edit-recipe {
-  max-width: 900px;
-  margin: 20px auto;
-  padding: 12px;
-  background: #fff;
-  border-radius: 8px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+    max-width: 900px;
+    margin: 20px auto;
+    background: #fff;
+    padding: 18px;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(15, 23, 42, 0.06);
+}
+
+.edit-recipe h2 {
+    margin: 0 0 12px;
 }
 
 .recipe-form {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
 }
 
 .field label {
-  font-weight: 600;
-  margin-bottom: 6px;
-  display: block;
+    font-weight: 600;
+    margin-bottom: 6px;
 }
 
-.ingredients .ingredient-row {
-  display: flex;
-  gap: 8px;
-  align-items: center;
-  margin-bottom: 8px;
-  position: relative;
+.field input,
+.field textarea {
+    padding: 8px 10px;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    font-size: 1rem;
 }
 
-.autocomplete-field {
-  position: relative;
-  flex: 1;
+/* Ingredients area */
+.ingredients-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0 6px;
 }
 
-.category-chips {
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-  margin-bottom: 8px;
+.add-btn {
+    background: #eef6ff;
+    border: 1px solid #cfe3ff;
+    color: #007bff;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
 }
 
-.chip {
-  background: #f0f0f0;
-  padding: 6px 8px;
-  border-radius: 999px;
-  display: inline-flex;
-  gap: 6px;
-  align-items: center;
+.ingredient-row {
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    padding: 6px;
 }
 
+.small-field {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.small-field input {
+    padding: 6px 8px;
+    border: 1px solid #eee;
+    border-radius: 6px;
+}
+
+/* Indicator for rows that matched existing ingredient (selected suggestion) */
+.ingredient-row.matched {
+    background: #f8fffb;
+    border-left: 3px solid #16a34a;
+    padding-left: 4px;
+    border-radius: 6px;
+}
+
+/* remove button */
+.remove-btn {
+    background: #fff4f4;
+    border: 1px solid #ffd0d0;
+    color: #b32;
+    padding: 6px 10px;
+    border-radius: 6px;
+    cursor: pointer;
+}
+
+/* Actions */
 .actions {
-  display: flex;
-  justify-content: flex-end;
+    display: flex;
+    justify-content: flex-end;
+}
+
+.actions button {
+    padding: 8px 14px;
+    border: none;
+    border-radius: 6px;
+    background: #007bff;
+    color: white;
+    cursor: pointer;
+    font-weight: 600;
+}
+
+.error {
+    color: #c0392b;
+}
+
+.success {
+    color: #186a3b;
+}
+
+/* Autocomplete specifics */
+.autocomplete-field {
+    position: relative;
+    width: 100%;
 }
 
 .suggestions {
-  position: absolute;
-  background: #fff;
-  border: 1px solid #ddd;
-  padding: 6px;
-  border-radius: 6px;
-  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.06);
-  z-index: 100;
+    list-style: none;
+    margin: 6px 0 0 0;
+    padding: 6px 0;
+    position: absolute;
+    top: 100%; /* place below input */
+    left: 0;
+    right: 0;
+    z-index: 300;
+    background: #fff;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    box-shadow: 0 6px 18px rgba(15,23,42,0.06);
+    max-height: 220px;
+    overflow-y: auto;
+}
+
+.suggestions li {
+    max-height: 200px;
+    overflow-y: auto;
+    padding: 8px 12px;
+    cursor: pointer;
+}
+
+.suggestions li:hover,
+.suggestions li.highlighted {
+    background: #f3f4f6;
 }
 </style>
