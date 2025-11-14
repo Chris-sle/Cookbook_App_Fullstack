@@ -16,7 +16,6 @@ export const useRecipesStore = defineStore('recipes', {
 
   actions: {
     async fetchRecipes() {
-      
       console.log('Fetching recipes...');
       this.loading = true
       this.error = null
@@ -33,6 +32,10 @@ export const useRecipesStore = defineStore('recipes', {
       } finally {
         this.loading = false
       }
+    },
+    clearCache() {
+      this.recipes = []
+      this.lastFetched = null
     }
   }
 })
