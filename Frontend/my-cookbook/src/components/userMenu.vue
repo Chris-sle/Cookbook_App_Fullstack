@@ -10,6 +10,7 @@
       <!-- If logged in, show username and logout -->
       <div v-if="isAuthenticated" class="user-info">
         <div class="username">Hello, {{ auth.username }}</div>
+        <router-link to="/account" @click="closeMenu">Account Settings</router-link>
         <logout-button />
       </div>
       <!-- If not logged in, show LoginForm and Register link -->
