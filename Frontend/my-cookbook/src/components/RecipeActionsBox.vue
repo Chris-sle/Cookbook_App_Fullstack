@@ -12,9 +12,7 @@ import { ref } from 'vue'
 
 const props = defineProps({
   recipeId: { type: String, required: true },
-  // optional: maybe pass recipe title for confirmation
   recipeTitle: { type: String, default: '' },
-  // optionally, recipe author or permissions info for permission logic
 })
 
 // for routing
@@ -23,10 +21,11 @@ const router = useRouter()
 // delete logic
 const isDeleting = ref(false)
 async function deleteRecipe() {
-  if (isDeleting) return
+  if (isDeleting.value) return
   if (!confirm(`Are you sure you want to delete "${props.recipeTitle || 'this recipe'}"?`)) return
   isDeleting.value = true
   try {
+    console.log('Deleting recipe', props.recipeId)
     await api.delete(`/recipes/${props.recipeId}`)
     alert('Recipe deleted')
     // redirect or refresh list
