@@ -5,7 +5,7 @@
         <section class="panel">
             <h2>Profile</h2>
             <p><strong>Username:</strong> {{ auth.username }}</p>
-            <p><strong>User ID:</strong> {{ auth.userId }}</p>
+            
             <EditUsernameEmail @updated="onUpdated" />
         </section>
 

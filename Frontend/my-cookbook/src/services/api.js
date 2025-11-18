@@ -25,6 +25,7 @@ api.interceptors.response.use(
     const originalReq = error.config
     // Detect 401 due to expired token
     if (error.response?.status === 401 && !originalReq._retry) {
+      console.log('Access token expired, attempting to refresh...')
       originalReq._retry = true
       if (!isRefreshing) {
         isRefreshing = true
@@ -35,11 +36,13 @@ api.interceptors.response.use(
           // Update store with new token
           const auth = useAuthStore()
           auth.setToken(newToken)
+          console.log('Token refreshed successfully')
         } catch (err) {
           // Refresh failed, logout user
           const auth = useAuthStore()
           auth.clearToken()
           window.location = '/login'
+          console.log('Token refresh failed, redirecting to login')
           throw error
         } finally {
           isRefreshing = false
