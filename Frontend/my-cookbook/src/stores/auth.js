@@ -8,7 +8,7 @@ export const useAuthStore = defineStore('auth', {
   }),
 
   actions: {
-    setToken(token, { userId, username } = {}) {
+    setToken(token, { userId, username, isAdmin } = {}) {
       this.token = token
       localStorage.setItem('token', token)
 
@@ -19,6 +19,10 @@ export const useAuthStore = defineStore('auth', {
       if (username !== undefined) {
         this.username = username
         localStorage.setItem('username', username)
+      }
+      if (is_admin !== undefined) {
+        this.isAdmin = is_admin
+        localStorage.setItem('isAdmin', is_admin)
       }
     },
     setAccessToken(token) {
