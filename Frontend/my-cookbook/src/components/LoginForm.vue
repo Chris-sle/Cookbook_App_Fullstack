@@ -60,7 +60,7 @@ async function submit() {
     const user = res.data?.user
     if (user) {
       // Map backend fields to the store shape (store expects userId, username)
-      auth.setToken(token, { userId: user.id, username: user.username })
+      auth.setToken(token, { userId: user.id, username: user.username, isAdmin: user.is_admin })
     } else {
       // Fallback: just store token
       auth.setToken(token)
