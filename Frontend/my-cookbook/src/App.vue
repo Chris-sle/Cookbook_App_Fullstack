@@ -4,8 +4,9 @@
       <h1>Cookbook</h1>
       <nav>
         <router-link to="/recipes">Recipes</router-link>
-        <router-link to="/recipes/add">Add Recipe</router-link>
-        <router-link to="/favorites">Favorites</router-link>
+        <router-link to="/recipes/add" v-if="isLoggedIn">Add Recipe</router-link>
+        <router-link to="/favorites" v-if="isLoggedIn">Favorites</router-link>
+        <router-link to="/admin" v-if="isAdmin">Admin Panel</router-link>
       </nav>
       <UserMenu style="margin-left:auto" />
     </header>
@@ -22,16 +23,21 @@
 </template>
 
 <script setup>
-import { onMounted } from 'vue'
+import { onMounted, computed } from 'vue'
 import { useRecipesStore } from './stores/recipes'
 import UserMenu from './components/userMenu.vue'
+import { useAuthStore } from './stores/auth'
 
 const recipesStore = useRecipesStore()
+const auth = useAuthStore()
+
+const isLoggedIn = computed(() => auth.isAuthenticated)
+const isAdmin = computed(() => auth.isAdmin)
+console.log('User is admin:', isAdmin.value)
+
 
 onMounted(() => {
-  // Try to fetch recipes; fetchRecipes will no-op if cache exists
   recipesStore.fetchRecipes().catch((err) => {
-    // error is saved in the store; optionally handle/log here
     console.error('Initial fetch failed', err)
   })
 })
